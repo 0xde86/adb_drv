@@ -7,25 +7,30 @@
 
 #include "blink.pio.h"
 
-void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq) {
+void blink_program_init(PIO pio, uint sm, uint offset, uint pin) {
+   pio_gpio_init(pio, pin);
+   pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+   pio_sm_config c = blink_program_get_default_config(offset);
+   sm_config_set_set_pins(&c, pin, 1);
+   sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 1e-6f); // 1 us/cyc
+   pio_sm_init(pio, sm, offset, &c);
+}
+
+void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, float freq) {
     blink_program_init(pio, sm, offset, pin);
     pio_sm_set_enabled(pio, sm, true);
 
-    printf("Blinking pin %d at %d Hz\n", pin, freq);
+    printf("Blinking pin %d at %.2f Hz\n", pin, freq);
 
     // PIO counter program takes 3 more cycles in total than we pass as
     // input (wait for n + 1; mov; jmp)
-    pio->txf[sm] = (125000000 / (2 * freq)) - 3;
+    pio->txf[sm] = (1000000 / (2 * freq)) - 3;
 }
 
 int64_t alarm_callback(alarm_id_t id, void *user_data) {
     // Put your timeout handler code in here
     return 0;
 }
-
-
-
-
 
 int main()
 {
@@ -36,11 +41,7 @@ int main()
     uint offset = pio_add_program(pio, &blink_program);
     printf("Loaded program at %d\n", offset);
     
-    #ifdef PICO_DEFAULT_LED_PIN
-    blink_pin_forever(pio, 0, offset, PICO_DEFAULT_LED_PIN, 3);
-    #else
-    blink_pin_forever(pio, 0, offset, 6, 3);
-    #endif
+    blink_pin_forever(pio, 0, offset, PICO_DEFAULT_LED_PIN, 0.5);
     // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
 
     // Timer example code - This example fires off the callback after 2000ms
@@ -64,8 +65,13 @@ int main()
     printf("USB Clock Frequency is %d Hz\n", clock_get_hz(clk_usb));
     // For more examples of clocks use see https://github.com/raspberrypi/pico-examples/tree/master/clocks
 
+    int i = 0;
     while (true) {
-        printf("Hello, world!\n");
-        sleep_ms(1000);
+        i++;
+        if (i % 100 == 0) {
+            printf("Hello, world!\n");
+        }
+        sleep_ms(90);
+        watchdog_update();
     }
 }
