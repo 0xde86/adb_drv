@@ -1,0 +1,39 @@
+; adb_rx.pio - ADB RX sampler
+;
+; ADB command transmit (adb_tx.pio) raises IRQ 0 at the end of sending command
+;
+; Clock 2 us/cycle.
+;
+; Tlt = 140-260 us (Apple Guide / AN591);
+; Count N=75 given as input equals to ~304 us timout window (covers Tlt).
+; On expiry: IRQ 1 = SILENCE.
+;
+; Start bit sampled 50-54 us after its edge, data bits 50-52 us
+; (cycle accounting in adb_rx.pio).
+; Required config: jmp-pin = ADB pin; ISR shift LEFT; autopush threshold 17.
+
+.program adb_rx_gated
+.wrap_target
+    pull block             ; CPU loads the Timeout window count
+    mov  x, osr
+    wait 1 irq 0           ; TX "done" gate
+    wait 1 pin 0           ; bus released after stop bit (tolerates SRQ)
+seek:
+    jmp  pin, count        ; line HIGH -> still no start bit
+    jmp  sample            ; line LOW  -> start bit detected
+count:
+    jmp  x--, seek         ; count down the Tlt window (~4 us/iteration)
+    irq  1                 ; window expired -> SILENCE
+    jmp  done
+sample:
+    nop          [22]      ; centre the sample at ~50 us
+    in   pins, 1           ; start bit (1st of 17)
+bits:
+    wait 1 pin 0
+    wait 0 pin 0
+    nop          [23]      ; ~50 us to this bit's sample point
+    in   pins, 1           ; autopush fires after the 17th `in`
+    jmp  bits
+done:
+    nop
+.wrap

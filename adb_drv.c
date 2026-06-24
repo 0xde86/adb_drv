@@ -1,77 +1,48 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/pio.h"
-#include "hardware/timer.h"
 #include "hardware/watchdog.h"
 #include "hardware/clocks.h"
 
-#include "blink.pio.h"
+#include "adb.h"
 
-void blink_program_init(PIO pio, uint sm, uint offset, uint pin) {
-   pio_gpio_init(pio, pin);
-   pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
-   pio_sm_config c = blink_program_get_default_config(offset);
-   sm_config_set_set_pins(&c, pin, 1);
-   sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 1e-6f); // 1 us/cyc
-   pio_sm_init(pio, sm, offset, &c);
-}
+// GPIO pin which will be used to connect to ADB device (via level shifter)
+#define ADB_PIN 2
 
-void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, float freq) {
-    blink_program_init(pio, sm, offset, pin);
-    pio_sm_set_enabled(pio, sm, true);
-
-    printf("Blinking pin %d at %.2f Hz\n", pin, freq);
-
-    // PIO counter program takes 3 more cycles in total than we pass as
-    // input (wait for n + 1; mov; jmp)
-    pio->txf[sm] = (1000000 / (2 * freq)) - 3;
-}
-
-int64_t alarm_callback(alarm_id_t id, void *user_data) {
-    // Put your timeout handler code in here
-    return 0;
-}
-
-int main()
-{
+int main() {
     stdio_init_all();
 
-    // PIO Blinking example
-    PIO pio = pio0;
-    uint offset = pio_add_program(pio, &blink_program);
-    printf("Loaded program at %d\n", offset);
-    
-    blink_pin_forever(pio, 0, offset, PICO_DEFAULT_LED_PIN, 0.5);
-    // For more pio examples see https://github.com/raspberrypi/pico-examples/tree/master/pio
-
-    // Timer example code - This example fires off the callback after 2000ms
-    add_alarm_in_ms(2000, alarm_callback, NULL, false);
-    // For more examples of timer use see https://github.com/raspberrypi/pico-examples/tree/master/timer
-
-    // Watchdog example code
     if (watchdog_caused_reboot()) {
         printf("Rebooted by Watchdog!\n");
-        // Whatever action you may take if a watchdog caused a reboot
+    }
+
+    ADB adb;
+    adb_err_t adb_err = adb_init(&adb, pio0, ADB_PIN);
+    if (adb_err != ADB_OK) {
+        printf("Faild to initialize ADB module: %s", adb_error_str(adb_err));
+        watchdog_reboot(0, 0, 0);
     }
     
-    // Enable the watchdog, requiring the watchdog to be updated every 100ms or the chip will reboot
-    // second arg is pause on debug which means the watchdog will pause when stepping through code
     watchdog_enable(100, 1);
-    
-    // You need to call this function at least more often than the 100ms in the enable call to prevent a reboot
     watchdog_update();
 
-    printf("System Clock Frequency is %d Hz\n", clock_get_hz(clk_sys));
-    printf("USB Clock Frequency is %d Hz\n", clock_get_hz(clk_usb));
+    printf("System Clock Frequency is %lu Hz\n", (long)clock_get_hz(clk_sys));
+    printf("USB Clock Frequency is %lu Hlz\n", (long)clock_get_hz(clk_usb));
     // For more examples of clocks use see https://github.com/raspberrypi/pico-examples/tree/master/clocks
 
-    int i = 0;
+    absolute_time_t next = make_timeout_time_ms(ADB_POLL_INTERVAL_MS);
     while (true) {
-        i++;
-        if (i % 100 == 0) {
-            printf("Hello, world!\n");
+        // tud_task();                                  // drain deferred USB events
+        if (time_reached(next)) {
+            next = make_timeout_time_ms(ADB_POLL_INTERVAL_MS);
+            watchdog_update();
+            mouse_event e;
+            if (adb_poll(&adb, &e)/*&& tud_hid_ready()*/) {
+                // uint8_t btn = (uint8_t)((e.left  ? MOUSE_BUTTON_LEFT  : 0)
+                //                       | (e.right ? MOUSE_BUTTON_RIGHT : 0));
+                // tud_hid_mouse_report(0, btn, e.dx, e.dy, 0, 0);
+                printf("mouse: dx=%+4d dy=%+4d L=%d R=%d\n",
+                       e.dx, e.dy, e.left, e.right);
+            }
         }
-        sleep_ms(90);
-        watchdog_update();
     }
 }

@@ -1,0 +1,45 @@
+; adb_tx.pio - ADB command transmit.
+;
+; Clock: 5 us/cycle
+;
+; Open-drain via side-set on PINDIRS:
+;   side 1 = output -> drives the parked-0 value -> line LOW
+;   side 0 = input  -> released -> pull-up -> line HIGH
+; The pin's output VALUE must be preset to 0 (done in C).
+;
+; Command byte arrives via the TX FIFO, left-justified: push (cmd << 24) so the
+; first `out` (shift-left) yields the command's MSB. 8 bits, MSB first.
+;
+; Cycle accounting is shown per line. Every instruction = 1 cycle + its [delay].
+;
+; When done it raises IRQ 0 (so RX PIO SM can start) and releases the bus.
+; Total: ~1.74 ms per command. Verify edges on a scope before trusting timing.
+
+.program adb_tx
+.side_set 1 pindirs
+
+.wrap_target
+    pull block        side 0        ; release bus (HIGH); wait for command byte
+    ; --- attention: ~800 us LOW ---
+    set  x, 31        side 1        ;  1 cyc LOW
+attn:
+    jmp  x--, attn    side 1 [4]    ; 32 x 5 = 160 cyc ; +set = 161 cyc ~= 805 us
+    ; --- sync: 70 us HIGH (and load the 8-bit counter) ---
+    set  y, 7         side 0        ;  1 cyc HIGH
+    nop               side 0 [12]   ; 13 cyc HIGH ; sync = 14 cyc = 70 us
+    ; --- 8 command bits, MSB first ---
+bitloop:
+    out  x, 1         side 1        ;  1 cyc LOW  (pull next bit into X)
+    jmp  !x, zerobit  side 1        ;  1 cyc LOW  (branch on bit value)
+    nop               side 1 [4]    ;  5 cyc LOW  -> "1" low = 1+1+5 = 7cyc = 35us
+    jmp  bitend       side 0 [11]   ; 12 cyc HIGH
+zerobit:
+    nop               side 1 [10]   ; 11 cyc LOW  -> "0" low = 1+1+11 = 13cyc = 65us
+    nop               side 0 [5]    ;  6 cyc HIGH
+bitend:
+    jmp  y--, bitloop side 0        ;  1 cyc HIGH -> "1" high = 12+1 = 13cyc = 65us
+                                    ;             -> "0" high =  6+1 =  7cyc = 35us
+    ; --- stop bit (a 0-low), then signal + release ---
+    nop               side 1 [12]   ; 13 cyc LOW = 65 us
+    irq  0            side 0        ; release bus (HIGH); flag RX to begin
+.wrap                               ; back to `pull` (stays released)
