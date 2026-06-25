@@ -23,14 +23,40 @@
 // register(bits 1-0): 00             - Register 0
 #define CMD_TALK_ADDR3_REG0 0x3C
 
+// Resource ownership bits for ADB::owned.
+#define ADB_OWNS_TX_PROG (1u << 0)
+#define ADB_OWNS_TX_SM   (1u << 1)
+#define ADB_OWNS_RX_PROG (1u << 2)
+#define ADB_OWNS_RX_SM   (1u << 3)
+
 // forward decls
 static adb_err_t adb_pio_init_tx(ADB *adb);
 static adb_err_t adb_pio_init_rx(ADB *adb);
 static mouse_event decode(uint16_t d);
 
+// Release all resources aquired by adb
+void adb_deinit(ADB *adb) {
+    if (adb->owned & ADB_OWNS_TX_SM) {
+        pio_sm_set_enabled(adb->pio, adb->tx_sm, false);
+        pio_sm_unclaim(adb->pio, adb->tx_sm);
+    }
+    if (adb->owned & ADB_OWNS_TX_PROG) {
+        pio_remove_program(adb->pio, &adb_tx_program, adb->tx_off);
+    }
+    if (adb->owned & ADB_OWNS_RX_SM) {
+        pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
+        pio_sm_unclaim(adb->pio, adb->rx_sm);
+    }
+    if (adb->owned & ADB_OWNS_RX_PROG) {
+        pio_remove_program(adb->pio, &adb_rx_gated_program, adb->rx_off);
+    }
+    adb->owned = 0;
+}
+
 adb_err_t adb_init(ADB *adb, PIO pio, uint pin) {
-    adb->pio = pio;
-    adb->pin = pin;
+    adb->pio   = pio;
+    adb->pin   = pin;
+    adb->owned = 0;
 
     adb_err_t err = adb_pio_init_tx(adb);
     if (err != ADB_OK) {
@@ -94,7 +120,7 @@ static int seven_bit_signed(uint16_t v) {
 }
 static mouse_event decode(uint16_t d) {
     mouse_event e;
-    e.dx    = (int8_t)seven_bit_signed(d);        // flip sign if movement mirrors
+    e.dx    = (int8_t)seven_bit_signed(d);
     e.dy    = (int8_t)seven_bit_signed(d >> 8);
     e.left  = (d & 0x8000) == 0;
     e.right = (d & 0x0080) == 0;
@@ -107,12 +133,14 @@ static adb_err_t adb_pio_init_tx(ADB *adb) {
         return ADB_ERR_ADD_TX;
     }
     adb->tx_off = (uint)off;
+    adb->owned |= ADB_OWNS_TX_PROG;
 
     int sm = pio_claim_unused_sm(adb->pio, false);
     if (sm < 0) {
         return ADB_ERR_CLAIM_TX_SM;
     }
     adb->tx_sm = (uint)sm;
+    adb->owned |= ADB_OWNS_TX_SM;
 
     pio_sm_config c = adb_tx_program_get_default_config(adb->tx_off);
     sm_config_set_sideset_pins(&c, adb->pin);
@@ -134,12 +162,14 @@ static adb_err_t adb_pio_init_rx(ADB *adb) {
         return ADB_ERR_ADD_RX;
     }
     adb->rx_off = (uint)off;
+    adb->owned |= ADB_OWNS_RX_PROG;
 
     int sm = pio_claim_unused_sm(adb->pio, false);
     if (sm < 0) {
         return ADB_ERR_CLAIM_RX_SM;
     }
     adb->rx_sm = (uint)sm;
+    adb->owned |= ADB_OWNS_RX_SM;
 
     pio_sm_config c = adb_rx_gated_program_get_default_config(adb->rx_off);
     sm_config_set_in_pins(&c, adb->pin);

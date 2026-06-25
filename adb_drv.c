@@ -18,7 +18,8 @@ int main(void) {
     ADB adb;
     adb_err_t adb_err = adb_init(&adb, pio0, ADB_PIN);
     if (adb_err != ADB_OK) {
-        printf("Faild to initialize ADB module: %s", adb_error_str(adb_err));
+        printf("Failed to initialize ADB module: %s\n", adb_error_str(adb_err));
+        adb_deinit(&adb);
         watchdog_reboot(0, 0, 0);
         while (1) { tight_loop_contents(); }
     }
@@ -26,8 +27,8 @@ int main(void) {
     watchdog_enable(100, 1);
     watchdog_update();
 
-    printf("System Clock Frequency is %lu Hz\n", (long)clock_get_hz(clk_sys));
-    printf("USB Clock Frequency is %lu Hlz\n", (long)clock_get_hz(clk_usb));
+    printf("System Clock Frequency is %lu Hz\n", (unsigned long)clock_get_hz(clk_sys));
+    printf("USB Clock Frequency is %lu Hz\n", (unsigned long)clock_get_hz(clk_usb));
     // For more examples of clocks use see https://github.com/raspberrypi/pico-examples/tree/master/clocks
 
     absolute_time_t next = make_timeout_time_ms(ADB_POLL_INTERVAL_MS);

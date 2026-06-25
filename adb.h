@@ -34,6 +34,7 @@ typedef struct {
     uint tx_off;
     uint rx_sm;
     uint rx_off;
+    uint8_t owned;  // bitmask of acquired resources (see ADB_OWNS_* in adb.c)
 } ADB;
 
 typedef struct {
@@ -43,6 +44,10 @@ typedef struct {
 
 // Init ADB module. Returns ADB_OK on success, adb_err_t < 0 on failure.
 adb_err_t adb_init(ADB *adb, PIO pio, uint pin);
+
+// Release all resources owned by `adb`. Safe to call on a partially-
+// initialized ADB and idempotent (a second call is a no-op).
+void adb_deinit(ADB *adb);
 
 // Poll mouse event from ADB device
 bool adb_poll(ADB *adb, mouse_event *out);
