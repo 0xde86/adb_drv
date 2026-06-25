@@ -10,7 +10,8 @@
 ;
 ; Start bit sampled 50-54 us after its edge, data bits 50-52 us
 ; (cycle accounting in adb_rx.pio).
-; Required config: jmp-pin = ADB pin; ISR shift LEFT; autopush threshold 17.
+; Required config: jmp-pin = ADB pin; ISR shift LEFT; autopush threshold =
+; ADB_RX_TOTAL_BITS (set in adb.c; one start bit + ADB_RX_DATA_BITS data bits).
 
 .program adb_rx_gated
 .wrap_target
@@ -27,12 +28,12 @@ count:
     jmp  done
 sample:
     nop          [22]      ; centre the sample at ~50 us
-    in   pins, 1           ; start bit (1st of 17)
+    in   pins, 1           ; start bit (1st of ADB_RX_TOTAL_BITS)
 bits:
     wait 1 pin 0
     wait 0 pin 0
     nop          [23]      ; ~50 us to this bit's sample point
-    in   pins, 1           ; autopush fires after the 17th `in`
+    in   pins, 1           ; autopush fires after ADB_RX_TOTAL_BITS ins
     jmp  bits
 done:
     nop

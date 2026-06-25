@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
@@ -29,13 +30,32 @@
 #define ADB_OWNS_RX_PROG (1u << 2)
 #define ADB_OWNS_RX_SM   (1u << 3)
 
+// Mouse Register 0 reply layout. Each axis is a 7-bit signed delta; the
+// button bits are active-LOW (0 == pressed).
+//
+//   bit  15 : button1 -> left   (ADB_BTN1_MASK)
+//   bits 14..8 : Y delta, 7-bit signed
+//   bit  7  : button2 -> right  (ADB_BTN2_MASK)
+//   bits 6..0  : X delta, 7-bit signed
+#define ADB_MOUSE_AXIS_BITS 7
+#define ADB_MOUSE_AXIS_MASK ((1u << ADB_MOUSE_AXIS_BITS) - 1u)
+#define ADB_MOUSE_AXIS_SIGN (1u << (ADB_MOUSE_AXIS_BITS - 1))
+#define ADB_MOUSE_AXIS_BIAS (1u <<  ADB_MOUSE_AXIS_BITS)
+#define ADB_BTN1_MASK       0x8000u
+#define ADB_BTN2_MASK       0x0080u
+
+// Mouse Register 0 wire width
+#define ADB_RX_DATA_BITS  16
+#define ADB_RX_TOTAL_BITS (ADB_RX_DATA_BITS + 1) // +1 start bit
+#define ADB_RX_DATA_MASK  ((1u << ADB_RX_DATA_BITS) - 1u)
+
 // forward decls
-static adb_err_t adb_pio_init_tx(ADB *adb);
-static adb_err_t adb_pio_init_rx(ADB *adb);
-static mouse_event decode(uint16_t d);
+static adb_err_t adb_pio_init_tx(adb_t *adb);
+static adb_err_t adb_pio_init_rx(adb_t *adb);
+static mouse_event_t decode(uint16_t d);
 
 // Release all resources aquired by adb
-void adb_deinit(ADB *adb) {
+void adb_deinit(adb_t *adb) {
     if (adb->owned & ADB_OWNS_TX_SM) {
         pio_sm_set_enabled(adb->pio, adb->tx_sm, false);
         pio_sm_unclaim(adb->pio, adb->tx_sm);
@@ -53,7 +73,7 @@ void adb_deinit(ADB *adb) {
     adb->owned = 0;
 }
 
-adb_err_t adb_init(ADB *adb, PIO pio, uint pin) {
+adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
     adb->pio   = pio;
     adb->pin   = pin;
     adb->owned = 0;
@@ -65,7 +85,7 @@ adb_err_t adb_init(ADB *adb, PIO pio, uint pin) {
     return adb_pio_init_rx(adb);
 }
 
-bool adb_poll(ADB *adb, mouse_event *out) {
+bool adb_poll(adb_t *adb, mouse_event_t *out) {
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
     pio_sm_clear_fifos(adb->pio, adb->rx_sm);
     pio_sm_restart(adb->pio, adb->rx_sm);
@@ -93,7 +113,7 @@ bool adb_poll(ADB *adb, mouse_event *out) {
     }
     uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-    uint16_t res = (uint16_t)(word & 0xFFFF);                  // drop the start bit
+    uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK);        // drop the start bit
     *out = decode(res);
     return true;
 }
@@ -111,35 +131,33 @@ const char *adb_error_str(adb_err_t err) {
     return "Unknown ADB error";
 }
 
-// decode Register 0 -> mouse event
-// bit15 = button1 (0=pressed) -> left ; bits14:8 = Y, 7-bit signed
-// bit7  = button2 (0=pressed) -> right; bits6:0  = X, 7-bit signed
 static int seven_bit_signed(uint16_t v) {
-    v &= 0x7F;
-    return (v & 0x40) ? (int)v - 128 : (int)v;
+    v &= ADB_MOUSE_AXIS_MASK;
+    return (v & ADB_MOUSE_AXIS_SIGN) ? (int)v - (int)ADB_MOUSE_AXIS_BIAS : (int)v;
 }
-static mouse_event decode(uint16_t d) {
-    mouse_event e;
+
+static mouse_event_t decode(uint16_t d) {
+    mouse_event_t e;
     e.dx    = (int8_t)seven_bit_signed(d);
     e.dy    = (int8_t)seven_bit_signed(d >> 8);
-    e.left  = (d & 0x8000) == 0;
-    e.right = (d & 0x0080) == 0;
+    e.left  = (d & ADB_BTN1_MASK) == 0;
+    e.right = (d & ADB_BTN2_MASK) == 0;
     return e;
 }
 
-static adb_err_t adb_pio_init_tx(ADB *adb) {
+static adb_err_t adb_pio_init_tx(adb_t *adb) {
     int off = pio_add_program(adb->pio, &adb_tx_program);
     if (off < 0) {
         return ADB_ERR_ADD_TX;
     }
-    adb->tx_off = (uint)off;
+    adb->tx_off = (uint8_t)off;
     adb->owned |= ADB_OWNS_TX_PROG;
 
     int sm = pio_claim_unused_sm(adb->pio, false);
     if (sm < 0) {
         return ADB_ERR_CLAIM_TX_SM;
     }
-    adb->tx_sm = (uint)sm;
+    adb->tx_sm = (uint8_t)sm;
     adb->owned |= ADB_OWNS_TX_SM;
 
     pio_sm_config c = adb_tx_program_get_default_config(adb->tx_off);
@@ -156,25 +174,25 @@ static adb_err_t adb_pio_init_tx(ADB *adb) {
     return ADB_OK;
 }
 
-static adb_err_t adb_pio_init_rx(ADB *adb) {
+static adb_err_t adb_pio_init_rx(adb_t *adb) {
     int off = pio_add_program(adb->pio, &adb_rx_gated_program);
     if (off < 0) {
         return ADB_ERR_ADD_RX;
     }
-    adb->rx_off = (uint)off;
+    adb->rx_off = (uint8_t)off;
     adb->owned |= ADB_OWNS_RX_PROG;
 
     int sm = pio_claim_unused_sm(adb->pio, false);
     if (sm < 0) {
         return ADB_ERR_CLAIM_RX_SM;
     }
-    adb->rx_sm = (uint)sm;
+    adb->rx_sm = (uint8_t)sm;
     adb->owned |= ADB_OWNS_RX_SM;
 
     pio_sm_config c = adb_rx_gated_program_get_default_config(adb->rx_off);
     sm_config_set_in_pins(&c, adb->pin);
     sm_config_set_jmp_pin(&c, adb->pin);                 // `jmp pin` tests the ADB line
-    sm_config_set_in_shift(&c, false /*left*/, true /*autopush*/, 17);
+    sm_config_set_in_shift(&c, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);
     sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 2e-6f); // 2 us/cyc
     if (pio_sm_init(adb->pio, adb->rx_sm, adb->rx_off, &c) < 0) {
         return ADB_ERR_INIT_RX_SM;

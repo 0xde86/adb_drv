@@ -1,7 +1,8 @@
 #include <stdio.h>
-#include "pico/stdlib.h"
+
 #include "hardware/watchdog.h"
 #include "hardware/clocks.h"
+#include "pico/stdlib.h"
 
 #include "adb.h"
 
@@ -15,7 +16,7 @@ int main(void) {
         printf("Rebooted by Watchdog!\n");
     }
 
-    ADB adb;
+    adb_t adb;
     adb_err_t adb_err = adb_init(&adb, pio0, ADB_PIN);
     if (adb_err != ADB_OK) {
         printf("Failed to initialize ADB module: %s\n", adb_error_str(adb_err));
@@ -37,7 +38,7 @@ int main(void) {
         if (time_reached(next)) {
             next = make_timeout_time_ms(ADB_POLL_INTERVAL_MS);
             watchdog_update();
-            mouse_event e;
+            mouse_event_t e;
             if (adb_poll(&adb, &e)/*&& tud_hid_ready()*/) {
                 // uint8_t btn = (uint8_t)((e.left  ? MOUSE_BUTTON_LEFT  : 0)
                 //                       | (e.right ? MOUSE_BUTTON_RIGHT : 0));

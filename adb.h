@@ -5,6 +5,9 @@
 #ifndef ADB_H
 #define ADB_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "hardware/pio.h"
 
 // In the book Guide_to_Macintosh_Family_Hardware there are several mentions
@@ -29,28 +32,28 @@ typedef enum {
 //  - decoding mouse movement
 typedef struct {
     PIO pio;
-    uint pin;
-    uint tx_sm;
-    uint tx_off;
-    uint rx_sm;
-    uint rx_off;
+    uint8_t pin;
+    uint8_t tx_sm;
+    uint8_t tx_off;
+    uint8_t rx_sm;
+    uint8_t rx_off;
     uint8_t owned;  // bitmask of acquired resources (see ADB_OWNS_* in adb.c)
-} ADB;
+} adb_t;
 
 typedef struct {
     int8_t dx, dy;
     bool left, right;
-} mouse_event;
+} mouse_event_t;
 
 // Init ADB module. Returns ADB_OK on success, adb_err_t < 0 on failure.
-adb_err_t adb_init(ADB *adb, PIO pio, uint pin);
+adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin);
 
 // Release all resources owned by `adb`. Safe to call on a partially-
 // initialized ADB and idempotent (a second call is a no-op).
-void adb_deinit(ADB *adb);
+void adb_deinit(adb_t *adb);
 
 // Poll mouse event from ADB device
-bool adb_poll(ADB *adb, mouse_event *out);
+bool adb_poll(adb_t *adb, mouse_event_t *out);
 
 // Human-readable description of an adb_err_t.
 const char* adb_error_str(adb_err_t err);
