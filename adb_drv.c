@@ -8,7 +8,7 @@
 // GPIO pin which will be used to connect to ADB device (via level shifter)
 #define ADB_PIN 2
 
-int main() {
+int main(void) {
     stdio_init_all();
 
     if (watchdog_caused_reboot()) {
@@ -20,6 +20,7 @@ int main() {
     if (adb_err != ADB_OK) {
         printf("Faild to initialize ADB module: %s", adb_error_str(adb_err));
         watchdog_reboot(0, 0, 0);
+        while (1) { tight_loop_contents(); }
     }
     
     watchdog_enable(100, 1);
