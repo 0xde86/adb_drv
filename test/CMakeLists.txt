@@ -6,10 +6,11 @@
 #   cmake --build test/build
 #   ctest --test-dir test/build --output-on-failure
 
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.21)
 project(adb_drv_tests C)
 
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 enable_testing()
 

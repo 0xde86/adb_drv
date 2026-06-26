@@ -1,8 +1,9 @@
 # Generated Cmake Pico project file
 
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.21)
 
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -35,7 +36,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(adb_drv adb_drv.c adb.c)
+add_executable(adb_drv adb_drv.c adb.c usb_descriptors.c)
 
 pico_set_program_name(adb_drv "adb_drv")
 pico_set_program_version(adb_drv "0.1")
@@ -80,12 +81,13 @@ target_include_directories(adb_drv PRIVATE
 )
 
 # Add any user requested libraries
-target_link_libraries(adb_drv 
+target_link_libraries(adb_drv
         hardware_pio
-        hardware_timer
         hardware_watchdog
         hardware_clocks
-        )
+        tinyusb_device
+        pico_unique_id
+)
 
 pico_add_extra_outputs(adb_drv)
 

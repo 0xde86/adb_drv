@@ -6,7 +6,6 @@
 
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
-#include "hardware/timer.h"
 #include "pico/time.h"
 
 #include "adb.h"

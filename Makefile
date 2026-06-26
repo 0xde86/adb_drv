@@ -25,7 +25,7 @@ build: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --target adb_drv
 
 $(BUILD_DIR)/CMakeCache.txt:
-	cmake -S . -B $(BUILD_DIR)
+	cmake -G Ninja -S . -B $(BUILD_DIR)
 
 test: $(TEST_BUILD_DIR)/CMakeCache.txt
 	cmake --build $(TEST_BUILD_DIR)
