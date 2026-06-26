@@ -38,20 +38,6 @@
 #define ADB_OWNS_RX_PROG (1u << 2)
 #define ADB_OWNS_RX_SM   (1u << 3)
 
-// Mouse Register 0 reply layout. Each axis is a 7-bit signed delta; the
-// button bits are active-LOW (0 == pressed).
-//
-//   bit  15 : button1 -> left   (ADB_BTN1_MASK)
-//   bits 14..8 : Y delta, 7-bit signed
-//   bit  7  : button2 -> right  (ADB_BTN2_MASK)
-//   bits 6..0  : X delta, 7-bit signed
-#define ADB_MOUSE_AXIS_BITS 7
-#define ADB_MOUSE_AXIS_MASK ((1u << ADB_MOUSE_AXIS_BITS) - 1u)
-#define ADB_MOUSE_AXIS_SIGN (1u << (ADB_MOUSE_AXIS_BITS - 1))
-#define ADB_MOUSE_AXIS_BIAS (1u <<  ADB_MOUSE_AXIS_BITS)
-#define ADB_BTN1_MASK       0x8000u
-#define ADB_BTN2_MASK       0x0080u
-
 // Mouse Register 0 wire width
 #define ADB_RX_DATA_BITS  16
 #define ADB_RX_TOTAL_BITS (ADB_RX_DATA_BITS + 1) // +1 start bit
@@ -77,7 +63,6 @@ _Static_assert(ADB_POLL_INTERVAL_MS * 1000u >
 // forward decls
 static adb_err_t adb_pio_init_tx(adb_t *adb);
 static adb_err_t adb_pio_init_rx(adb_t *adb);
-static mouse_event_t decode(uint16_t d);
 
 // Release all resources aquired by adb
 void adb_deinit(adb_t *adb) {
@@ -139,7 +124,7 @@ bool adb_poll(const adb_t *adb, mouse_event_t *out) {
     uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
     uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK);        // drop the start bit
-    *out = decode(res);
+    *out = adb_decode_mouse(res);
     return true;
 }
 
@@ -154,20 +139,6 @@ const char *adb_error_str(adb_err_t err) {
     case ADB_ERR_INIT_RX_SM:  return "PIO: failed to init RX state machine";
     }
     return "Unknown ADB error";
-}
-
-static int seven_bit_signed(uint16_t v) {
-    v &= ADB_MOUSE_AXIS_MASK;
-    return (v & ADB_MOUSE_AXIS_SIGN) ? (int)v - (int)ADB_MOUSE_AXIS_BIAS : (int)v;
-}
-
-static mouse_event_t decode(uint16_t d) {
-    mouse_event_t e;
-    e.dx    = (int8_t)seven_bit_signed(d);
-    e.dy    = (int8_t)seven_bit_signed(d >> 8);
-    e.left  = (d & ADB_BTN1_MASK) == 0;
-    e.right = (d & ADB_BTN2_MASK) == 0;
-    return e;
 }
 
 static adb_err_t adb_pio_init_tx(adb_t *adb) {

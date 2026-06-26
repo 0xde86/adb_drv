@@ -13,6 +13,8 @@
 
 #include "hardware/pio.h"
 
+#include "adb_decode.h"
+
 // In the book Guide_to_Macintosh_Family_Hardware there are several mentions
 // that ADB manager polls devices every 11ms. Documentation from tmk_keyboard repo also
 // mentions 11ms as poll interval for active device.
@@ -42,11 +44,6 @@ typedef struct {
     uint8_t rx_off;
     uint8_t owned;  // bitmask of acquired resources (see ADB_OWNS_* in adb.c)
 } adb_t;
-
-typedef struct {
-    int8_t dx, dy;
-    bool left, right;
-} mouse_event_t;
 
 /**
  * Initialize the ADB driver on the given PIO and pin.

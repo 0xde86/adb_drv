@@ -42,3 +42,11 @@ rm -rf build
 mkdir build
 cd ./build && cmake -G Ninja ..  && ninja clang-tidy
 ```
+
+## Test
+
+```bash
+cmake -S test -B test/build
+cmake --build test/build
+ctest --test-dir test/build --output-on-failure
+```
