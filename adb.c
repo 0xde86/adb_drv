@@ -14,8 +14,13 @@
 #include "adb_rx.pio.h"
 #include "adb_tx.pio.h"
 
-// Number of PIO cycles to wait for response from ADB device
-// 75 * 2 * 2us/cyc ~= 304us - Covers Tlt = 140-260 us (Guide/AN591)
+// PIO state-machine clock periods
+#define ADB_TX_CYC_US 5u
+#define ADB_RX_CYC_US 2u
+
+// Number of Tlt-window iterations the RX state machine waits for the device
+// to assert the start bit. Each iteration is 2 PIO instructions.
+// 75 * 2 * ADB_RX_CYC_US ~= 300 us - covers Tlt = 140-260 us (Guide/AN591).
 #define TIMEOUT_CYC_COUNT 75
 
 // The command byte
@@ -51,6 +56,23 @@
 #define ADB_RX_DATA_BITS  16
 #define ADB_RX_TOTAL_BITS (ADB_RX_DATA_BITS + 1) // +1 start bit
 #define ADB_RX_DATA_MASK  ((1u << ADB_RX_DATA_BITS) - 1u)
+
+// Worst-case wire time for one poll. Polls must not overlap.
+//   TX command   349 cyc * ADB_TX_CYC_US (see adb_tx.pio: attn 161 + sync 14
+//                + 8*20 bits + stop 14 = 349 cyc -> ~1.74 ms)
+//   Tlt window   TIMEOUT_CYC_COUNT * 2 PIO instr/iter * ADB_RX_CYC_US
+//   RX reply     ADB_RX_TOTAL_BITS * 100 us  (100 us per bit on the wire)
+#define ADB_TX_CYCLES        349u
+#define ADB_TX_TIME_US       (ADB_TX_CYCLES * ADB_TX_CYC_US)
+#define ADB_TLT_MAX_US       (TIMEOUT_CYC_COUNT * 2u * ADB_RX_CYC_US)
+#define ADB_RX_REPLY_TIME_US (ADB_RX_TOTAL_BITS * 100u)
+#define FALLBACK_TIMEOUT_MS  6u
+_Static_assert(ADB_POLL_INTERVAL_MS * 1000u >
+                   ADB_TX_TIME_US + ADB_TLT_MAX_US + ADB_RX_REPLY_TIME_US,
+    "ADB_POLL_INTERVAL_MS must exceed worst-case TX+Tlt+RX transaction time");
+_Static_assert(ADB_POLL_INTERVAL_MS * 1000u >
+                   ADB_TX_TIME_US + FALLBACK_TIMEOUT_MS * 1000u,
+    "ADB_POLL_INTERVAL_MS must exceed fallback TX+fallback timeout");
 
 // forward decls
 static adb_err_t adb_pio_init_tx(adb_t *adb);
@@ -88,7 +110,7 @@ adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
     return adb_pio_init_rx(adb);
 }
 
-bool adb_poll(adb_t *adb, mouse_event_t *out) {
+bool adb_poll(const adb_t *adb, mouse_event_t *out) {
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
     pio_sm_clear_fifos(adb->pio, adb->rx_sm);
     pio_sm_restart(adb->pio, adb->rx_sm);
@@ -103,7 +125,7 @@ bool adb_poll(adb_t *adb, mouse_event_t *out) {
     // Safety net only (silence is signalled by IRQ 1 long before this). Sized
     // to the full transaction: TX ~1.74 ms + Tlt <=0.26 ms + reply sampling
     // ~1.7 ms => word arrives ~3.7 ms after the command push. 6 ms >> that.
-    absolute_time_t deadline = make_timeout_time_ms(6);
+    absolute_time_t deadline = make_timeout_time_ms(FALLBACK_TIMEOUT_MS);
     while (pio_sm_is_rx_fifo_empty(adb->pio, adb->rx_sm)) {
         if (pio_interrupt_get(adb->pio, 1)) { // RX reported SILENCE
             pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
@@ -166,7 +188,7 @@ static adb_err_t adb_pio_init_tx(adb_t *adb) {
     pio_sm_config c = adb_tx_program_get_default_config(adb->tx_off);
     sm_config_set_sideset_pins(&c, adb->pin);
     sm_config_set_out_shift(&c, false /*left*/, false /*no autopull*/, 8);
-    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 5e-6f); // 5 us/cyc
+    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * (float)ADB_TX_CYC_US * 1e-6f);
     pio_gpio_init(adb->pio, adb->pin);
     pio_sm_set_pins_with_mask(adb->pio, adb->tx_sm, 0, 1u << adb->pin);   // value latch = 0
     pio_sm_set_pindirs_with_mask(adb->pio, adb->tx_sm, 0, 1u << adb->pin);  // start released
@@ -196,7 +218,7 @@ static adb_err_t adb_pio_init_rx(adb_t *adb) {
     sm_config_set_in_pins(&c, adb->pin);
     sm_config_set_jmp_pin(&c, adb->pin);                 // `jmp pin` tests the ADB line
     sm_config_set_in_shift(&c, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);
-    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 2e-6f); // 2 us/cyc
+    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * (float)ADB_RX_CYC_US * 1e-6f);
     if (pio_sm_init(adb->pio, adb->rx_sm, adb->rx_off, &c) < 0) {
         return ADB_ERR_INIT_RX_SM;
     }

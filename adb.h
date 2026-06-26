@@ -49,14 +49,15 @@ typedef struct {
 } mouse_event_t;
 
 // Init ADB module. Returns ADB_OK on success, adb_err_t < 0 on failure.
-adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin);
+adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin)
+    __attribute__((nonnull(1), warn_unused_result));
 
 // Release all resources owned by `adb`. Safe to call on a partially-
 // initialized ADB and idempotent (a second call is a no-op).
-void adb_deinit(adb_t *adb);
+void adb_deinit(adb_t *adb) __attribute__((nonnull));
 
 // Poll mouse event from ADB device
-bool adb_poll(adb_t *adb, mouse_event_t *out);
+bool adb_poll(const adb_t *adb, mouse_event_t *out) __attribute__((nonnull));
 
 // Human-readable description of an adb_err_t.
 const char* adb_error_str(adb_err_t err);

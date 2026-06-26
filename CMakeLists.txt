@@ -50,7 +50,25 @@ pico_enable_stdio_usb(adb_drv 0)
 
 # Strict warnings on our sources only; SDK headers stay quiet.
 set_source_files_properties(adb_drv.c adb.c
-    PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic")
+    PROPERTIES COMPILE_OPTIONS
+    "-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wformat=2;-Wundef;-Wnull-dereference;-Wstrict-prototypes")
+
+# Dedicated `clang-tidy` target that runs on our sources only.
+# Run with: cmake --build build --target clang-tidy
+# (Not wired into the default build because pico_sdk_init() adds SDK sources
+#  directly into adb_drv; the target-level C_CLANG_TIDY would scan them too.)
+# find_program(CLANG_TIDY clang-tidy)
+# if(CLANG_TIDY)
+    add_custom_target(clang-tidy
+        COMMAND clang-tidy
+            --checks=cert-*,bugprone-*,readability-*
+            --header-filter=${CMAKE_CURRENT_LIST_DIR}/.*
+            -p ${CMAKE_BINARY_DIR}
+            ${CMAKE_CURRENT_LIST_DIR}/adb_drv.c
+            ${CMAKE_CURRENT_LIST_DIR}/adb.c
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMENT "Running clang-tidy on first-party sources")
+# endif()
 
 # Add the standard library to the build
 target_link_libraries(adb_drv

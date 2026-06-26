@@ -18,6 +18,21 @@
             }
         },
         {
+            "label": "Run clang-tidy",
+            "type": "process",
+            "command": "${userHome}/.pico-sdk/ninja/v1.12.1/ninja",
+            "args": ["-C", "${workspaceFolder}/build", "clang-tidy"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": "$gcc",
+            "windows": {
+                "command": "${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1/ninja.exe"
+            }
+        },
+        {
             "label": "Run Project",
             "type": "process",
             "command": "${env:HOME}/.pico-sdk/picotool/2.2.0-a4/picotool/picotool",

@@ -26,3 +26,19 @@ Implementation is based on information from:
 - [adb_rx.pio](adb_rx.pio) - gates on IRQ 0, hunts for the device's start bit
   within the Tlt window, then samples the start bit + 16 data bits at
   2 µs/cycle. Raises IRQ 1 if the window expires (no response from device).
+
+## Clean Build
+
+```bash
+rm -rf build
+mkdir build
+cd ./build && cmake -G Ninja ..  && ninja adb_drv
+```
+
+## Clean Static check
+
+```bash
+rm -rf build
+mkdir build
+cd ./build && cmake -G Ninja ..  && ninja clang-tidy
+```
