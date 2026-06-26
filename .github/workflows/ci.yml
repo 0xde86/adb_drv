@@ -26,7 +26,7 @@ jobs:
     name: Host tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install deps
         run: |
           sudo apt-get update
@@ -37,7 +37,7 @@ jobs:
     name: Fuzz
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install deps
         run: |
           sudo apt-get update
@@ -48,7 +48,7 @@ jobs:
     name: Firmware
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install host deps
         run: |
@@ -62,7 +62,7 @@ jobs:
 
       - name: Cache Pico SDK
         id: cache-sdk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/pico-sdk
           key: pico-sdk-${{ env.PICO_SDK_VERSION }}
@@ -84,7 +84,7 @@ jobs:
         run: make tidy
 
       - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware
           path: |
@@ -101,13 +101,13 @@ jobs:
       contents: write
     steps:
       - name: Download firmware artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: firmware
           path: firmware
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             firmware/adb_drv.uf2

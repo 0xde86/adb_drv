@@ -54,22 +54,40 @@ set_source_files_properties(adb_drv.c adb.c
     PROPERTIES COMPILE_OPTIONS
     "-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wformat=2;-Wundef;-Wnull-dereference;-Wstrict-prototypes")
 
-# Dedicated `clang-tidy` target that runs on our sources only.
-# Run with: cmake --build build --target clang-tidy
-# (Not wired into the default build because pico_sdk_init() adds SDK sources
-#  directly into adb_drv; the target-level C_CLANG_TIDY would scan them too.)
-# find_program(CLANG_TIDY clang-tidy)
-# if(CLANG_TIDY)
-    add_custom_target(clang-tidy
-        COMMAND clang-tidy
-            --checks=cert-*,bugprone-*,readability-*
-            --header-filter=${CMAKE_CURRENT_LIST_DIR}/[^/]+\\.h
-            -p ${CMAKE_BINARY_DIR}
-            ${CMAKE_CURRENT_LIST_DIR}/adb_drv.c
-            ${CMAKE_CURRENT_LIST_DIR}/adb.c
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        COMMENT "Running clang-tidy on first-party sources")
-# endif()
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -E -Wp,-v -xc -
+    INPUT_FILE /dev/null
+    ERROR_VARIABLE _cc_verbose
+    OUTPUT_QUIET
+)
+string(REPLACE "\n" ";" _cc_verbose_lines "${_cc_verbose}")
+set(_in_search_block FALSE)
+set(_tidy_sysincludes "")
+foreach(_line IN LISTS _cc_verbose_lines)
+    if(_line MATCHES "End of search list")
+        set(_in_search_block FALSE)
+    endif()
+    if(_in_search_block)
+        string(STRIP "${_line}" _dir)
+        if(_dir)
+            list(APPEND _tidy_sysincludes "--extra-arg-before=-isystem${_dir}")
+        endif()
+    endif()
+    if(_line MATCHES "#include <\\.\\.\\.> search starts here:")
+        set(_in_search_block TRUE)
+    endif()
+endforeach()
+
+add_custom_target(clang-tidy
+    COMMAND clang-tidy
+        --checks=cert-*,bugprone-*,readability-*
+        --header-filter=${CMAKE_CURRENT_LIST_DIR}/[^/]+\\.h
+        ${_tidy_sysincludes}
+        -p ${CMAKE_BINARY_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/adb_drv.c
+        ${CMAKE_CURRENT_LIST_DIR}/adb.c
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    COMMENT "Running clang-tidy on first-party sources")
 
 # Add the standard library to the build
 target_link_libraries(adb_drv

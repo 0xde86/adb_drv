@@ -37,8 +37,8 @@ static inline mouse_event_t adb_decode_mouse(uint16_t data) {
     mouse_event_t e;
     e.dx    = (int8_t)adb_seven_bit_signed(data);
     e.dy    = (int8_t)adb_seven_bit_signed(data >> 8);
-    e.left  = (data & ADB_BTN1_MASK) == 0;
-    e.right = (data & ADB_BTN2_MASK) == 0;
+    e.left  = (bool)((data & ADB_BTN1_MASK) == 0);
+    e.right = (bool)((data & ADB_BTN2_MASK) == 0);
     return e;
 }
 
