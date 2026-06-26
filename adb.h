@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Denis Rodin
+
 // Implementation is based on information from:
 // - https://developer.apple.com/library/archive/documentation/mac/pdf/Devices/ADB_Manager.pdf
 // - https://vintageapple.org/inside_o/pdf/Guide_to_Macintosh_Family_Hardware_2nd_Edition_1990.pdf
