@@ -42,7 +42,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW_TAG: ${{ steps.tag.outputs.new_tag }}
-        run: gh workflow run ci.yml --ref "$NEW_TAG"
+        run: gh workflow run build.yml --ref "$NEW_TAG"
 
       - name: Summary
         env:

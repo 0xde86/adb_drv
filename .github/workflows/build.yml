@@ -1,12 +1,13 @@
-# CI for adb_drv:
-#   - host-tests: CTest unit tests
-#   - fuzz:       libFuzzer harness
-#   - firmware:   build .uf2/.elf with arm-none-eabi-gcc + Pico SDK, run clang-tidy
-#   - release:    on a `v*` tag, attach uf2/elf + auto-attached source archives
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Denis Rodin
+#
+# Firmware build (arm-none-eabi-gcc + Pico SDK), clang-tidy lint, and — on
+# a `v*` tag — publish a GitHub Release with .uf2 + .elf attached (source
+# archives are auto-attached by GitHub for tag releases).
 #
 # Pico SDK is cloned + cached per version; bump PICO_SDK_VERSION below.
 
-name: CI
+name: Build
 
 on:
   push:
@@ -22,28 +23,6 @@ env:
   ARM_TOOLCHAIN_VERSION: "15.2.Rel1"
 
 jobs:
-  host-tests:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-      - name: Install deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build gcc
-      - run: make test
-
-  fuzz:
-    name: Fuzz
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-      - name: Install deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang
-      - run: make fuzz FUZZ_TIME=30
-
   firmware:
     name: Build
     runs-on: ubuntu-latest
@@ -94,7 +73,7 @@ jobs:
 
   release:
     name: GitHub release
-    needs: [host-tests, fuzz, firmware]
+    needs: firmware
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:

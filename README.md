@@ -1,5 +1,9 @@
 # adb_drv
 
+[![Test](https://github.com/0xde86/adb_drv/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/0xde86/adb_drv/actions/workflows/test.yml)
+[![Fuzz](https://github.com/0xde86/adb_drv/actions/workflows/fuzz.yml/badge.svg?branch=master)](https://github.com/0xde86/adb_drv/actions/workflows/fuzz.yml)
+[![Build](https://github.com/0xde86/adb_drv/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/0xde86/adb_drv/actions/workflows/build.yml)
+
 ADB (Apple Desktop Bus) driver for the Raspberry Pi Pico 2 (RP2350). Polls an
 Apple ADB mouse and re-emits mouse events as USB HID mouse. USB machinery is
 handled by TinyUSB SDK.
