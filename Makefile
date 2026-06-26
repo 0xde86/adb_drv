@@ -6,6 +6,8 @@
 
 BUILD_DIR       ?= build
 TEST_BUILD_DIR  ?= test/build
+FUZZ_BUILD_DIR  ?= test/build-fuzz
+FUZZ_TIME       ?= 10
 PICOTOOL_DIR    ?= $(HOME)/.pico-sdk/picotool/2.2.0-a4
 PICOTOOL        ?= $(PICOTOOL_DIR)/picotool/picotool
 OPENOCD_DIR     ?= $(HOME)/.pico-sdk/openocd/0.12.0+dev
@@ -15,7 +17,7 @@ OPENOCD_TARGET  ?= rp2350
 UF2             := $(BUILD_DIR)/adb_drv.uf2
 ELF             := $(BUILD_DIR)/adb_drv.elf
 
-.PHONY: all build test static-check flash flash-swd clean help
+.PHONY: all build test fuzz static-check flash flash-swd clean help
 
 all: build
 
@@ -35,6 +37,13 @@ $(TEST_BUILD_DIR)/CMakeCache.txt:
 static-check: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --target clang-tidy
 
+fuzz: $(FUZZ_BUILD_DIR)/CMakeCache.txt
+	cmake --build $(FUZZ_BUILD_DIR) --target fuzz_decode
+	$(FUZZ_BUILD_DIR)/fuzz_decode -max_total_time=$(FUZZ_TIME)
+
+$(FUZZ_BUILD_DIR)/CMakeCache.txt:
+	CC=clang cmake -S test -B $(FUZZ_BUILD_DIR)
+
 flash: build
 	$(PICOTOOL) load $(UF2) -fx
 
@@ -45,13 +54,14 @@ flash-swd: build
 		-c "adapter speed 5000; program $(ELF) verify reset exit"
 
 clean:
-	rm -rf $(BUILD_DIR) $(TEST_BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(TEST_BUILD_DIR) $(FUZZ_BUILD_DIR)
 
 help:
 	@echo "Targets:"
 	@echo "  build         build firmware ($(UF2))"
 	@echo "  test          build & run host unit tests via CTest"
 	@echo "  static-check  run clang-tidy on first-party sources"
+	@echo "  fuzz          run libFuzzer harness for $(FUZZ_TIME)s (for fun only)"
 	@echo "  flash         flash firmware via picotool (USB BOOTSEL)"
 	@echo "  flash-swd     flash firmware via OpenOCD/SWD (CMSIS-DAP probe)"
 	@echo "  clean         remove build directories"

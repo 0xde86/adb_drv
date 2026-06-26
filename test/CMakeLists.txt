@@ -25,3 +25,15 @@ target_compile_options(test_decode PRIVATE
     -Wall -Wextra -Wpedantic)
 
 add_test(NAME decode COMMAND test_decode)
+
+# libFuzzer harness
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    add_executable(fuzz_decode fuzz_decode.c)
+    target_include_directories(fuzz_decode PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/..)
+    target_compile_options(fuzz_decode PRIVATE
+        -Wall -Wextra -Wpedantic -g
+        -fsanitize=fuzzer,address,undefined)
+    target_link_options(fuzz_decode PRIVATE
+        -fsanitize=fuzzer,address,undefined)
+endif()
