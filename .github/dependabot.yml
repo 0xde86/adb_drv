@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Denis Rodin
+#
+# Keeps SHA-pinned GitHub Actions current. Dependabot watches each `uses:`
+# entry, notices when the comment-tagged version moves to a new commit, and
+# opens a PR bumping the SHA + refreshing the `# vX` comment.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # One bundled PR per week instead of N separate ones.
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - ci
+    open-pull-requests-limit: 5
