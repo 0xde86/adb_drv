@@ -17,9 +17,9 @@ OPENOCD_TARGET  ?= rp2350
 UF2             := $(BUILD_DIR)/adb_drv.uf2
 ELF             := $(BUILD_DIR)/adb_drv.elf
 
-.PHONY: all build test fuzz static-check flash flash-swd clean help
+.PHONY: all build test fuzz tidy flash flash-swd clean help
 
-all: build
+all: help
 
 build: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --target adb_drv
@@ -34,7 +34,7 @@ test: $(TEST_BUILD_DIR)/CMakeCache.txt
 $(TEST_BUILD_DIR)/CMakeCache.txt:
 	cmake -S test -B $(TEST_BUILD_DIR)
 
-static-check: $(BUILD_DIR)/CMakeCache.txt
+tidy: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --target clang-tidy
 
 fuzz: $(FUZZ_BUILD_DIR)/CMakeCache.txt
@@ -60,7 +60,7 @@ help:
 	@echo "Targets:"
 	@echo "  build         build firmware ($(UF2))"
 	@echo "  test          build & run host unit tests via CTest"
-	@echo "  static-check  run clang-tidy on first-party sources"
+	@echo "  tidy          run clang-tidy"
 	@echo "  fuzz          run libFuzzer harness for $(FUZZ_TIME)s (for fun only)"
 	@echo "  flash         flash firmware via picotool (USB BOOTSEL)"
 	@echo "  flash-swd     flash firmware via OpenOCD/SWD (CMSIS-DAP probe)"

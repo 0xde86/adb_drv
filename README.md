@@ -32,7 +32,7 @@ Implementation is based on information from:
 ```bash
 make build         # build firmware (build/adb_drv.uf2)
 make test          # build & run host unit tests via CTest
-make static-check  # run clang-tidy
+make tidy          # run clang-tidy
 make fuzz          # run libFuzzer on adb_decode_mouse() just for fun :)
 make flash         # flash via picotool over USB (BOOTSEL)
 make flash-swd     # flash via OpenOCD/SWD (CMSIS-DAP probe)
