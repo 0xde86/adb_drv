@@ -18,6 +18,12 @@
 // main loop never trips it.
 #define ADB_WATCHDOG_TIMEOUT_MS 100
 
+#ifndef NDEBUG
+#define DBG(...) printf(__VA_ARGS__)
+#else
+#define DBG(...) ((void)sizeof(printf(__VA_ARGS__)))
+#endif
+
 static int8_t clamp_i8(int16_t value) {
     if (value > INT8_MAX) { return INT8_MAX; }
     if (value < INT8_MIN) { return INT8_MIN; }
@@ -90,7 +96,7 @@ int main(void) {
                 pend_dx = (int16_t)(pend_dx + e.dx);
                 pend_dy = (int16_t)(pend_dy + e.dy);
                 cur_btn = adb_buttons_to_hid(&e);
-                printf("mouse: dx=%+4d dy=%+4d L=%d R=%d pend=%+d,%+d\n",
+                DBG("mouse: dx=%+4d dy=%+4d L=%d R=%d pend=%+d,%+d\n",
                     e.dx, e.dy, (int)e.left, (int)e.right,
                     pend_dx, pend_dy);
             }
@@ -98,7 +104,7 @@ int main(void) {
     }
 }
 
-void tud_mount_cb(void)                  { printf("USB: mounted\n"); }
-void tud_umount_cb(void)                 { printf("USB: unmounted\n"); }
-void tud_suspend_cb(bool remote_wakeup)  { printf("USB: suspended\n"); (void)remote_wakeup; }
-void tud_resume_cb(void)                 { printf("USB: resumed\n"); }
+void tud_mount_cb(void)                  { DBG("USB: mounted\n"); }
+void tud_umount_cb(void)                 { DBG("USB: unmounted\n"); }
+void tud_suspend_cb(bool remote_wakeup)  { DBG("USB: suspended\n"); (void)remote_wakeup; }
+void tud_resume_cb(void)                 { DBG("USB: resumed\n"); }

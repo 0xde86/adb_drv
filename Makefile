@@ -8,6 +8,8 @@ BUILD_DIR       ?= build
 TEST_BUILD_DIR  ?= test/build
 FUZZ_BUILD_DIR  ?= test/build-fuzz
 FUZZ_TIME       ?= 10
+# Release strips hot-path DBG() prints; Debug keeps them.
+BUILD_TYPE      ?= Release
 PICOTOOL_DIR    ?= $(HOME)/.pico-sdk/picotool/2.2.0-a4
 PICOTOOL        ?= $(PICOTOOL_DIR)/picotool/picotool
 OPENOCD_DIR     ?= $(HOME)/.pico-sdk/openocd/0.12.0+dev
@@ -25,7 +27,7 @@ build: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --target adb_drv
 
 $(BUILD_DIR)/CMakeCache.txt:
-	cmake -G Ninja -S . -B $(BUILD_DIR)
+	cmake -G Ninja -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 
 test: $(TEST_BUILD_DIR)/CMakeCache.txt
 	cmake --build $(TEST_BUILD_DIR)
@@ -65,3 +67,7 @@ help:
 	@echo "  flash         flash firmware via picotool (USB BOOTSEL)"
 	@echo "  flash-swd     flash firmware via OpenOCD/SWD (CMSIS-DAP probe)"
 	@echo "  clean         remove build directories"
+	@echo ""
+	@echo "Variables: BUILD_TYPE=Release|Debug (default Release). Debug keeps"
+	@echo "hot-path DBG() prints; Release compiles them out. Run 'make clean'"
+	@echo "before switching BUILD_TYPE"

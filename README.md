@@ -47,3 +47,13 @@ second Pico running picoprobe firmware).
 
 Override the SDK paths via env if your install lives elsewhere:
 `PICOTOOL_DIR=`, `OPENOCD_DIR=`, `OPENOCD_TARGET=` (defaults to `rp2350`).
+
+## Debug vs release builds
+
+Default is `Release`.
+For verbose tracing over the UART console:
+
+```bash
+make clean
+BUILD_TYPE=Debug make build
+```
