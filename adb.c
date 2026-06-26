@@ -15,8 +15,15 @@
 #include "adb_tx.pio.h"
 
 // PIO state-machine clock periods
-#define ADB_TX_CYC_US 5u
-#define ADB_RX_CYC_US 2u
+#define ADB_TX_CYC_US 5U
+#define ADB_RX_CYC_US 2U
+
+// Convert microseconds to seconds for sm_config_set_clkdiv().
+#define ADB_US_TO_S 1e-6F
+
+// TX FIFO is 32-bit, command byte is loaded into the top 8 bits so the
+// PIO program reads them out first via OUT shifting left.
+#define ADB_TX_FIFO_CMD_SHIFT 24U
 
 // Number of Tlt-window iterations the RX state machine waits for the device
 // to assert the start bit. Each iteration is 2 PIO instructions.
@@ -33,15 +40,15 @@
 #define CMD_TALK_ADDR3_REG0 0x3C
 
 // Resource ownership bits for ADB::owned.
-#define ADB_OWNS_TX_PROG (1u << 0)
-#define ADB_OWNS_TX_SM   (1u << 1)
-#define ADB_OWNS_RX_PROG (1u << 2)
-#define ADB_OWNS_RX_SM   (1u << 3)
+#define ADB_OWNS_TX_PROG (1U << 0)
+#define ADB_OWNS_TX_SM   (1U << 1)
+#define ADB_OWNS_RX_PROG (1U << 2)
+#define ADB_OWNS_RX_SM   (1U << 3)
 
 // Mouse Register 0 wire width
 #define ADB_RX_DATA_BITS  16
 #define ADB_RX_TOTAL_BITS (ADB_RX_DATA_BITS + 1) // +1 start bit
-#define ADB_RX_DATA_MASK  ((1u << ADB_RX_DATA_BITS) - 1u)
+#define ADB_RX_DATA_MASK  ((1U << ADB_RX_DATA_BITS) - 1U)
 
 // Worst-case wire time for one poll. Polls must not overlap.
 //   TX command   349 cyc * ADB_TX_CYC_US (see adb_tx.pio: attn 161 + sync 14
@@ -50,14 +57,14 @@
 //   RX reply     ADB_RX_TOTAL_BITS * 100 us  (100 us per bit on the wire)
 #define ADB_TX_CYCLES        349u
 #define ADB_TX_TIME_US       (ADB_TX_CYCLES * ADB_TX_CYC_US)
-#define ADB_TLT_MAX_US       (TIMEOUT_CYC_COUNT * 2u * ADB_RX_CYC_US)
+#define ADB_TLT_MAX_US       (TIMEOUT_CYC_COUNT * 2U * ADB_RX_CYC_US)
 #define ADB_RX_REPLY_TIME_US (ADB_RX_TOTAL_BITS * 100u)
 #define FALLBACK_TIMEOUT_MS  6u
-_Static_assert(ADB_POLL_INTERVAL_MS * 1000u >
+_Static_assert(ADB_POLL_INTERVAL_MS * 1000U >
                    ADB_TX_TIME_US + ADB_TLT_MAX_US + ADB_RX_REPLY_TIME_US,
     "ADB_POLL_INTERVAL_MS must exceed worst-case TX+Tlt+RX transaction time");
-_Static_assert(ADB_POLL_INTERVAL_MS * 1000u >
-                   ADB_TX_TIME_US + FALLBACK_TIMEOUT_MS * 1000u,
+_Static_assert(ADB_POLL_INTERVAL_MS * 1000U >
+                   ADB_TX_TIME_US + (FALLBACK_TIMEOUT_MS * 1000U),
     "ADB_POLL_INTERVAL_MS must exceed fallback TX+fallback timeout");
 
 // forward decls
@@ -105,7 +112,7 @@ bool adb_poll(const adb_t *adb, mouse_event_t *out) {
     pio_sm_put(adb->pio, adb->rx_sm, TIMEOUT_CYC_COUNT);                     // preload the Tlt window
     pio_sm_set_enabled(adb->pio, adb->rx_sm, true);               // pull->mov x->wait irq0->seek
 
-    pio_sm_put_blocking(adb->pio, adb->tx_sm, (uint32_t)CMD_TALK_ADDR3_REG0 << 24);
+    pio_sm_put_blocking(adb->pio, adb->tx_sm, (uint32_t)CMD_TALK_ADDR3_REG0 << ADB_TX_FIFO_CMD_SHIFT);
 
     // Safety net only (silence is signalled by IRQ 1 long before this). Sized
     // to the full transaction: TX ~1.74 ms + Tlt <=0.26 ms + reply sampling
@@ -156,14 +163,14 @@ static adb_err_t adb_pio_init_tx(adb_t *adb) {
     adb->tx_sm = (uint8_t)sm;
     adb->owned |= ADB_OWNS_TX_SM;
 
-    pio_sm_config c = adb_tx_program_get_default_config(adb->tx_off);
-    sm_config_set_sideset_pins(&c, adb->pin);
-    sm_config_set_out_shift(&c, false /*left*/, false /*no autopull*/, 8);
-    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * (float)ADB_TX_CYC_US * 1e-6f);
+    pio_sm_config cfg = adb_tx_program_get_default_config(adb->tx_off);
+    sm_config_set_sideset_pins(&cfg, adb->pin);
+    sm_config_set_out_shift(&cfg, false /*left*/, false /*no autopull*/, 8);
+    sm_config_set_clkdiv(&cfg, (float)clock_get_hz(clk_sys) * (float)ADB_TX_CYC_US * ADB_US_TO_S);
     pio_gpio_init(adb->pio, adb->pin);
-    pio_sm_set_pins_with_mask(adb->pio, adb->tx_sm, 0, 1u << adb->pin);   // value latch = 0
-    pio_sm_set_pindirs_with_mask(adb->pio, adb->tx_sm, 0, 1u << adb->pin);  // start released
-    if (pio_sm_init(adb->pio, adb->tx_sm, adb->tx_off, &c) < 0) {
+    pio_sm_set_pins_with_mask(adb->pio, adb->tx_sm, 0, 1U << adb->pin);   // value latch = 0
+    pio_sm_set_pindirs_with_mask(adb->pio, adb->tx_sm, 0, 1U << adb->pin);  // start released
+    if (pio_sm_init(adb->pio, adb->tx_sm, adb->tx_off, &cfg) < 0) {
         return ADB_ERR_INIT_TX_SM;
     }
     pio_sm_set_enabled(adb->pio, adb->tx_sm, true);
@@ -185,12 +192,12 @@ static adb_err_t adb_pio_init_rx(adb_t *adb) {
     adb->rx_sm = (uint8_t)sm;
     adb->owned |= ADB_OWNS_RX_SM;
 
-    pio_sm_config c = adb_rx_gated_program_get_default_config(adb->rx_off);
-    sm_config_set_in_pins(&c, adb->pin);
-    sm_config_set_jmp_pin(&c, adb->pin);                 // `jmp pin` tests the ADB line
-    sm_config_set_in_shift(&c, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);
-    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * (float)ADB_RX_CYC_US * 1e-6f);
-    if (pio_sm_init(adb->pio, adb->rx_sm, adb->rx_off, &c) < 0) {
+    pio_sm_config cfg = adb_rx_gated_program_get_default_config(adb->rx_off);
+    sm_config_set_in_pins(&cfg, adb->pin);
+    sm_config_set_jmp_pin(&cfg, adb->pin);                 // `jmp pin` tests the ADB line
+    sm_config_set_in_shift(&cfg, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);
+    sm_config_set_clkdiv(&cfg, (float)clock_get_hz(clk_sys) * (float)ADB_RX_CYC_US * ADB_US_TO_S);
+    if (pio_sm_init(adb->pio, adb->rx_sm, adb->rx_off, &cfg) < 0) {
         return ADB_ERR_INIT_RX_SM;
     }
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);

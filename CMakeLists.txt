@@ -62,7 +62,7 @@ set_source_files_properties(adb_drv.c adb.c
     add_custom_target(clang-tidy
         COMMAND clang-tidy
             --checks=cert-*,bugprone-*,readability-*
-            --header-filter=${CMAKE_CURRENT_LIST_DIR}/.*
+            --header-filter=${CMAKE_CURRENT_LIST_DIR}/[^/]+\\.h
             -p ${CMAKE_BINARY_DIR}
             ${CMAKE_CURRENT_LIST_DIR}/adb_drv.c
             ${CMAKE_CURRENT_LIST_DIR}/adb.c

@@ -1,0 +1,8 @@
+Checks: 'cert-*,bugprone-*,readability-*'
+CheckOptions:
+  readability-identifier-length.IgnoredVariableNames: '^(sm|e)$'
+  readability-identifier-length.IgnoredParameterNames: '^(sm|e)$'
+  # Primitive conversion factors — naming them adds noise without meaning
+  # (8 = byte bits, 1000 = metric prefix).
+  readability-magic-numbers.IgnoredIntegerValues: '1;2;8;1000'
+  readability-magic-numbers.IgnoredFloatingPointValues: '1.0'

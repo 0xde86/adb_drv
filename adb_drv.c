@@ -12,6 +12,10 @@
 // GPIO pin which will be used to connect to ADB device (via level shifter)
 #define ADB_PIN 2
 
+// Watchdog timeout — must be larger than one poll interval so a healthy
+// main loop never trips it.
+#define ADB_WATCHDOG_TIMEOUT_MS 100
+
 int main(void) {
     stdio_init_all();
 
@@ -28,7 +32,7 @@ int main(void) {
         while (1) { tight_loop_contents(); }
     }
     
-    watchdog_enable(100, 1);
+    watchdog_enable(ADB_WATCHDOG_TIMEOUT_MS, true);
     watchdog_update();
 
     printf("System Clock Frequency is %lu Hz\n", (unsigned long)clock_get_hz(clk_sys));
@@ -47,7 +51,7 @@ int main(void) {
                 //                       | (e.right ? MOUSE_BUTTON_RIGHT : 0));
                 // tud_hid_mouse_report(0, btn, e.dx, e.dy, 0, 0);
                 printf("mouse: dx=%+4d dy=%+4d L=%d R=%d\n",
-                       e.dx, e.dy, e.left, e.right);
+                       e.dx, e.dy, (int)e.left, (int)e.right);
             }
         }
     }

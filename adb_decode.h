@@ -22,23 +22,23 @@ typedef struct {
 //   bit  7  : button2 -> right  (ADB_BTN2_MASK)
 //   bits 6..0  : X delta, 7-bit signed
 #define ADB_MOUSE_AXIS_BITS 7
-#define ADB_MOUSE_AXIS_MASK ((1u << ADB_MOUSE_AXIS_BITS) - 1u)
-#define ADB_MOUSE_AXIS_SIGN (1u << (ADB_MOUSE_AXIS_BITS - 1))
-#define ADB_MOUSE_AXIS_BIAS (1u <<  ADB_MOUSE_AXIS_BITS)
-#define ADB_BTN1_MASK       0x8000u
-#define ADB_BTN2_MASK       0x0080u
+#define ADB_MOUSE_AXIS_MASK ((1U << ADB_MOUSE_AXIS_BITS) - 1U)
+#define ADB_MOUSE_AXIS_SIGN (1U << (ADB_MOUSE_AXIS_BITS - 1))
+#define ADB_MOUSE_AXIS_BIAS (1U <<  ADB_MOUSE_AXIS_BITS)
+#define ADB_BTN1_MASK       0x8000U
+#define ADB_BTN2_MASK       0x0080U
 
-static inline int adb_seven_bit_signed(uint16_t v) {
-    v &= ADB_MOUSE_AXIS_MASK;
-    return (v & ADB_MOUSE_AXIS_SIGN) ? (int)v - (int)ADB_MOUSE_AXIS_BIAS : (int)v;
+static inline int adb_seven_bit_signed(uint16_t val) {
+    val &= ADB_MOUSE_AXIS_MASK;
+    return (val & ADB_MOUSE_AXIS_SIGN) ? (int)val - (int)ADB_MOUSE_AXIS_BIAS : (int)val;
 }
 
-static inline mouse_event_t adb_decode_mouse(uint16_t d) {
+static inline mouse_event_t adb_decode_mouse(uint16_t data) {
     mouse_event_t e;
-    e.dx    = (int8_t)adb_seven_bit_signed(d);
-    e.dy    = (int8_t)adb_seven_bit_signed(d >> 8);
-    e.left  = (d & ADB_BTN1_MASK) == 0;
-    e.right = (d & ADB_BTN2_MASK) == 0;
+    e.dx    = (int8_t)adb_seven_bit_signed(data);
+    e.dy    = (int8_t)adb_seven_bit_signed(data >> 8);
+    e.left  = (data & ADB_BTN1_MASK) == 0;
+    e.right = (data & ADB_BTN2_MASK) == 0;
     return e;
 }
 
