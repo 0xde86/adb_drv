@@ -35,7 +35,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(adb_drv adb_drv.c adb.c)
+add_executable(adb_drv adb_drv.c adb.c adb_pio_init.c adb_mouse_init.c)
 
 pico_set_program_name(adb_drv "adb_drv")
 pico_set_program_version(adb_drv "0.1")
@@ -43,13 +43,14 @@ pico_set_program_version(adb_drv "0.1")
 # Generate PIO headers
 pico_generate_pio_header(adb_drv ${CMAKE_CURRENT_LIST_DIR}/adb_tx.pio)
 pico_generate_pio_header(adb_drv ${CMAKE_CURRENT_LIST_DIR}/adb_rx.pio)
+pico_generate_pio_header(adb_drv ${CMAKE_CURRENT_LIST_DIR}/adb_mouse_init.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(adb_drv 1)
 pico_enable_stdio_usb(adb_drv 0)
 
 # Strict warnings on our sources only; SDK headers stay quiet.
-set_source_files_properties(adb_drv.c adb.c
+set_source_files_properties(adb_drv.c adb.c adb_pio_init.c adb_mouse_init.c
     PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Wpedantic")
 
 # Add the standard library to the build

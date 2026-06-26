@@ -1,15 +1,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "hardware/clocks.h"
 #include "hardware/pio.h"
-#include "hardware/timer.h"
 #include "pico/time.h"
 
 #include "adb.h"
-// auto-generated headers from PIO assembly
-#include "adb_rx.pio.h"
-#include "adb_tx.pio.h"
+#include "adb_mouse_init.h"
+#include "adb_pio_init.h"
 
 // Number of PIO cycles to wait for response from ADB device
 // 75 * 2 * 2us/cyc ~= 304us - Covers Tlt = 140-260 us (Guide/AN591)
@@ -23,12 +20,6 @@
 // command (bits 3-2): 11             - Talk (10 - Listen, 01 - Flush, 00 - Reset 00)
 // register(bits 1-0): 00             - Register 0
 #define CMD_TALK_ADDR3_REG0 0x3C
-
-// Resource ownership bits for ADB::owned.
-#define ADB_OWNS_TX_PROG (1u << 0)
-#define ADB_OWNS_TX_SM   (1u << 1)
-#define ADB_OWNS_RX_PROG (1u << 2)
-#define ADB_OWNS_RX_SM   (1u << 3)
 
 // Mouse Register 0 reply layout. Each axis is a 7-bit signed delta; the
 // button bits are active-LOW (0 == pressed).
@@ -44,34 +35,7 @@
 #define ADB_BTN1_MASK       0x8000u
 #define ADB_BTN2_MASK       0x0080u
 
-// Mouse Register 0 wire width
-#define ADB_RX_DATA_BITS  16
-#define ADB_RX_TOTAL_BITS (ADB_RX_DATA_BITS + 1) // +1 start bit
-#define ADB_RX_DATA_MASK  ((1u << ADB_RX_DATA_BITS) - 1u)
-
-// forward decls
-static adb_err_t adb_pio_init_tx(adb_t *adb);
-static adb_err_t adb_pio_init_rx(adb_t *adb);
 static mouse_event_t decode(uint16_t d);
-
-// Release all resources aquired by adb
-void adb_deinit(adb_t *adb) {
-    if (adb->owned & ADB_OWNS_TX_SM) {
-        pio_sm_set_enabled(adb->pio, adb->tx_sm, false);
-        pio_sm_unclaim(adb->pio, adb->tx_sm);
-    }
-    if (adb->owned & ADB_OWNS_TX_PROG) {
-        pio_remove_program(adb->pio, &adb_tx_program, adb->tx_off);
-    }
-    if (adb->owned & ADB_OWNS_RX_SM) {
-        pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-        pio_sm_unclaim(adb->pio, adb->rx_sm);
-    }
-    if (adb->owned & ADB_OWNS_RX_PROG) {
-        pio_remove_program(adb->pio, &adb_rx_gated_program, adb->rx_off);
-    }
-    adb->owned = 0;
-}
 
 adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
     adb->pio   = pio;
@@ -80,12 +44,29 @@ adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
 
     adb_err_t err = adb_pio_init_tx(adb);
     if (err != ADB_OK) {
+        adb_deinit(adb);
         return err;
     }
-    return adb_pio_init_rx(adb);
+    err = adb_pio_init_rx(adb);
+    if (err != ADB_OK) {
+        adb_deinit(adb);
+        return err;
+    }
+    err = adb_mouse_init(adb);
+    if (err != ADB_OK) {
+        adb_deinit(adb);
+        return err;
+    }
+    return ADB_OK;
 }
 
-bool adb_poll(adb_t *adb, mouse_event_t *out) {
+void adb_deinit(adb_t *adb) {
+    adb_mouse_deinit(adb);
+    adb_pio_deinit_rx(adb);
+    adb_pio_deinit_tx(adb);
+}
+
+bool adb_talk(adb_t *adb, uint8_t cmd, uint16_t *response) {
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
     pio_sm_clear_fifos(adb->pio, adb->rx_sm);
     pio_sm_restart(adb->pio, adb->rx_sm);
@@ -95,7 +76,7 @@ bool adb_poll(adb_t *adb, mouse_event_t *out) {
     pio_sm_put(adb->pio, adb->rx_sm, TIMEOUT_CYC_COUNT);                     // preload the Tlt window
     pio_sm_set_enabled(adb->pio, adb->rx_sm, true);               // pull->mov x->wait irq0->seek
 
-    pio_sm_put_blocking(adb->pio, adb->tx_sm, (uint32_t)CMD_TALK_ADDR3_REG0 << 24);
+    pio_sm_put_blocking(adb->pio, adb->tx_sm, (uint32_t)cmd << 24);
 
     // Safety net only (silence is signalled by IRQ 1 long before this). Sized
     // to the full transaction: TX ~1.74 ms + Tlt <=0.26 ms + reply sampling
@@ -113,7 +94,15 @@ bool adb_poll(adb_t *adb, mouse_event_t *out) {
     }
     uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
     pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-    uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK);        // drop the start bit
+    *response = (uint16_t)(word & ADB_RX_DATA_MASK);        // drop the start bit
+    return true;
+}
+
+bool adb_poll(adb_t *adb, mouse_event_t *out) {
+    uint16_t res;
+    if (!adb_talk(adb, CMD_TALK_ADDR3_REG0, &res)) {
+        return false;
+    }
     *out = decode(res);
     return true;
 }
@@ -143,60 +132,4 @@ static mouse_event_t decode(uint16_t d) {
     e.left  = (d & ADB_BTN1_MASK) == 0;
     e.right = (d & ADB_BTN2_MASK) == 0;
     return e;
-}
-
-static adb_err_t adb_pio_init_tx(adb_t *adb) {
-    int off = pio_add_program(adb->pio, &adb_tx_program);
-    if (off < 0) {
-        return ADB_ERR_ADD_TX;
-    }
-    adb->tx_off = (uint8_t)off;
-    adb->owned |= ADB_OWNS_TX_PROG;
-
-    int sm = pio_claim_unused_sm(adb->pio, false);
-    if (sm < 0) {
-        return ADB_ERR_CLAIM_TX_SM;
-    }
-    adb->tx_sm = (uint8_t)sm;
-    adb->owned |= ADB_OWNS_TX_SM;
-
-    pio_sm_config c = adb_tx_program_get_default_config(adb->tx_off);
-    sm_config_set_sideset_pins(&c, adb->pin);
-    sm_config_set_out_shift(&c, false /*left*/, false /*no autopull*/, 8);
-    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 5e-6f); // 5 us/cyc
-    pio_gpio_init(adb->pio, adb->pin);
-    pio_sm_set_pins_with_mask(adb->pio, adb->tx_sm, 0, 1u << adb->pin);   // value latch = 0
-    pio_sm_set_pindirs_with_mask(adb->pio, adb->tx_sm, 0, 1u << adb->pin);  // start released
-    if (pio_sm_init(adb->pio, adb->tx_sm, adb->tx_off, &c) < 0) {
-        return ADB_ERR_INIT_TX_SM;
-    }
-    pio_sm_set_enabled(adb->pio, adb->tx_sm, true);
-    return ADB_OK;
-}
-
-static adb_err_t adb_pio_init_rx(adb_t *adb) {
-    int off = pio_add_program(adb->pio, &adb_rx_gated_program);
-    if (off < 0) {
-        return ADB_ERR_ADD_RX;
-    }
-    adb->rx_off = (uint8_t)off;
-    adb->owned |= ADB_OWNS_RX_PROG;
-
-    int sm = pio_claim_unused_sm(adb->pio, false);
-    if (sm < 0) {
-        return ADB_ERR_CLAIM_RX_SM;
-    }
-    adb->rx_sm = (uint8_t)sm;
-    adb->owned |= ADB_OWNS_RX_SM;
-
-    pio_sm_config c = adb_rx_gated_program_get_default_config(adb->rx_off);
-    sm_config_set_in_pins(&c, adb->pin);
-    sm_config_set_jmp_pin(&c, adb->pin);                 // `jmp pin` tests the ADB line
-    sm_config_set_in_shift(&c, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);
-    sm_config_set_clkdiv(&c, (float)clock_get_hz(clk_sys) * 2e-6f); // 2 us/cyc
-    if (pio_sm_init(adb->pio, adb->rx_sm, adb->rx_off, &c) < 0) {
-        return ADB_ERR_INIT_RX_SM;
-    }
-    pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-    return ADB_OK;
 }

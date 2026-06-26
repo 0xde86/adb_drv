@@ -52,6 +52,12 @@ adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin);
 // initialized ADB and idempotent (a second call is a no-op).
 void adb_deinit(adb_t *adb);
 
+// Send a one-byte ADB Talk command and capture the 16-bit response (the
+// first 2 bytes returned by the device, in wire order). Returns true on
+// success, false on SILENCE (no device replied) or transaction timeout.
+// Low-level: callers typically use adb_poll instead.
+bool adb_talk(adb_t *adb, uint8_t cmd, uint16_t *response);
+
 // Poll mouse event from ADB device
 bool adb_poll(adb_t *adb, mouse_event_t *out);
 

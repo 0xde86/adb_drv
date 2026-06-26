@@ -1,0 +1,60 @@
+; adb_mouse_init.pio - Listen-Register-3 data drive.
+;
+; Used for ONE-SHOT init handshake only. Triggered after adb_tx finishes
+; sending the Listen-R3 command byte (IRQ 0). Drives:
+;
+;   1. Tlt:       ~200 us bus released   (host gap, spec 140-260 us)
+;   2. Start bit: ADB "1" = 35 us LOW + 65 us HIGH
+;   3. 16 data bits, MSB first, ADB bit encoding:
+;        "1" = 35 us LOW + 65 us HIGH
+;        "0" = 65 us LOW + 35 us HIGH
+;      (ADB bit cell = 100 us per Apple Guide / AN591)
+;   4. Stop bit:  ADB "0" low pulse, then release.
+;   5. IRQ 1 to signal completion to the C side.
+;
+; Open-drain via side-set on PINDIRS (same convention as adb_tx.pio):
+;   side 1 = output -> drives parked-0 value -> line LOW
+;   side 0 = input  -> released -> pull-up -> line HIGH
+; Pin output VALUE must be preset to 0 in C (done by adb_pio_init_tx).
+;
+; FIFO format: caller pushes the 16-bit payload left-justified -
+; pio_sm_put(sm, (uint32_t)data16 << 16) - so the first `out` shifts the
+; wire MSB out of OSR.
+;
+; Clock: 5 us/cycle (matches adb_tx).
+
+.program adb_mouse_init
+.side_set 1 pindirs
+
+.wrap_target
+    pull block         side 0        ; wait for C to push the 16 data bits
+    wait 1 irq 0       side 0        ; gate on adb_tx's "cmd done"
+
+    ; --- Tlt: 32 iter + set + jmp-fall-through ~= 165 us bus released ---
+    ; (PIO `set` immediate is 5-bit, max 31; spec window is 140-260 us)
+    set  x, 31         side 0        ;  1 cyc
+tlt:
+    jmp  x--, tlt      side 0        ; 32 cyc total (1 per iter, last fall-through)
+
+    ; --- start bit (a 1: 35 us LOW + 65 us HIGH) ---
+    nop                side 1 [6]    ;  7 cyc LOW  = 35 us
+    nop                side 0 [12]   ; 13 cyc HIGH = 65 us
+
+    ; --- 16 data bits, MSB first ---
+    set  y, 15         side 0
+data_bit:
+    out  x, 1          side 1        ;  1 cyc LOW  (pull next bit)
+    jmp  !x, dzero     side 1        ;  1 cyc LOW  (branch on value)
+    nop                side 1 [4]    ;  5 cyc LOW  -> "1" low = 7 cyc = 35 us
+    jmp  dend          side 0 [11]   ; 12 cyc HIGH
+dzero:
+    nop                side 1 [10]   ; 11 cyc LOW  -> "0" low = 13 cyc = 65 us
+    nop                side 0 [5]    ;  6 cyc HIGH
+dend:
+    jmp  y--, data_bit side 0        ;  1 cyc HIGH -> "1" high = 13 cyc = 65 us
+                                     ;             -> "0" high =  7 cyc = 35 us
+
+    ; --- stop bit (a 0: 65 us LOW, then release) ---
+    nop                side 1 [12]   ; 13 cyc LOW = 65 us
+    irq  1             side 0        ; signal C, release bus
+.wrap                                ; back to pull block for next call
