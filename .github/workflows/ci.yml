@@ -1,0 +1,116 @@
+# CI for adb_drv:
+#   - host-tests: CTest unit tests
+#   - fuzz:       libFuzzer harness
+#   - firmware:   build .uf2/.elf with arm-none-eabi-gcc + Pico SDK, run clang-tidy
+#   - release:    on a `v*` tag, attach uf2/elf + auto-attached source archives
+#
+# Pico SDK is cloned + cached per version; bump PICO_SDK_VERSION below.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Must match the version pinned in CMakeLists.txt
+  PICO_SDK_VERSION: "2.2.0"
+  # Must match the toolchain pinned in CMakeLists.txt
+  ARM_TOOLCHAIN_VERSION: "15.2.Rel1"
+
+jobs:
+  host-tests:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc
+      - run: make test
+
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang
+      - run: make fuzz FUZZ_TIME=30
+
+  firmware:
+    name: Firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang-tidy python3
+
+      - name: Install arm-none-eabi-gcc ${{ env.ARM_TOOLCHAIN_VERSION }}
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: ${{ env.ARM_TOOLCHAIN_VERSION }}
+
+      - name: Cache Pico SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ~/pico-sdk
+          key: pico-sdk-${{ env.PICO_SDK_VERSION }}
+
+      - name: Clone Pico SDK ${{ env.PICO_SDK_VERSION }}
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          git clone --branch "${PICO_SDK_VERSION}" --depth 1 \
+            https://github.com/raspberrypi/pico-sdk.git "$HOME/pico-sdk"
+          git -C "$HOME/pico-sdk" submodule update --init --recursive --depth 1
+
+      - name: Point CMake at the SDK
+        run: echo "PICO_SDK_PATH=$HOME/pico-sdk" >> "$GITHUB_ENV"
+
+      - name: Build firmware
+        run: make build
+
+      - name: Run clang-tidy
+        run: make tidy
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            build/adb_drv.uf2
+            build/adb_drv.elf
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: [host-tests, fuzz, firmware]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: firmware
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            firmware/adb_drv.uf2
+            firmware/adb_drv.elf
+          generate_release_notes: true
+          fail_on_unmatched_files: true
