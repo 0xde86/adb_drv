@@ -48,18 +48,46 @@ typedef struct {
     bool left, right;
 } mouse_event_t;
 
-// Init ADB module. Returns ADB_OK on success, adb_err_t < 0 on failure.
+/**
+ * Initialize the ADB driver on the given PIO and pin.
+ * Loads the TX and RX PIO programs and claims one state machine for each.
+ *
+ * @param adb  Driver instance to initialize. Must not be NULL.
+ * @param pio  PIO instance to use (e.g. pio0).
+ * @param pin  GPIO pin connected to the ADB data line.
+ * @return     ADB_OK on success, or a negative ::adb_err_t on failure.
+ *             On failure, partially-claimed resources are recorded in `adb`;
+ *             the caller must call adb_deinit() to release them.
+ */
 adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin)
     __attribute__((nonnull(1), warn_unused_result));
 
-// Release all resources owned by `adb`. Safe to call on a partially-
-// initialized ADB and idempotent (a second call is a no-op).
+/**
+ * Release all PIO resources owned by `adb`.
+ * Safe to call on a partially-initialized driver and idempotent
+ *
+ * @param adb  Driver instance. Must not be NULL.
+ */
 void adb_deinit(adb_t *adb) __attribute__((nonnull));
 
-// Poll mouse event from ADB device
+/**
+ * Issue a Talk Register 0 to the mouse at address 3 and decode the reply.
+ * Intended to be called every ::ADB_POLL_INTERVAL_MS.
+ *
+ * @param adb  Initialized driver instance. Must not be NULL.
+ * @param out  Destination for the decoded event. Must not be NULL.
+ *             Written only when the function returns true.
+ * @return     true if a reply was received and decoded into `*out`;
+ *             false on silence (no device responded) or timeout.
+ */
 bool adb_poll(const adb_t *adb, mouse_event_t *out) __attribute__((nonnull));
 
-// Human-readable description of an adb_err_t.
+/**
+ * Human-readable description of an ::adb_err_t value.
+ *
+ * @param err  Error code, returned by adb_init().
+ * @return     Pointer to a constant string literal; never NULL.
+ */
 const char* adb_error_str(adb_err_t err);
 
 #endif
