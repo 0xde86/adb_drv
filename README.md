@@ -27,26 +27,22 @@ Implementation is based on information from:
   within the Tlt window, then samples the start bit + 16 data bits at
   2 µs/cycle. Raises IRQ 1 if the window expires (no response from device).
 
-## Clean Build
+## Make targets
 
 ```bash
-rm -rf build
-mkdir build
-cd ./build && cmake -G Ninja ..  && ninja adb_drv
+make build         # build firmware (build/adb_drv.uf2)
+make test          # build & run host unit tests via CTest
+make static-check  # run clang-tidy
+make flash         # flash via picotool over USB (BOOTSEL)
+make flash-swd     # flash via OpenOCD/SWD (CMSIS-DAP probe)
+make clean         # remove build/ and test/build/
+make help          # list the above
 ```
 
-## Clean Static check
+`make flash` uses the SDK's `picotool` and only needs a USB cable — the
+running firmware reboots itself into BOOTSEL. `make flash-swd` uses the
+SDK's bundled OpenOCD and a CMSIS-DAP probe (Raspberry Pi Debug Probe or a
+second Pico running picoprobe firmware).
 
-```bash
-rm -rf build
-mkdir build
-cd ./build && cmake -G Ninja ..  && ninja clang-tidy
-```
-
-## Test
-
-```bash
-cmake -S test -B test/build
-cmake --build test/build
-ctest --test-dir test/build --output-on-failure
-```
+Override the SDK paths via env if your install lives elsewhere:
+`PICOTOOL_DIR=`, `OPENOCD_DIR=`, `OPENOCD_TARGET=` (defaults to `rp2350`).
