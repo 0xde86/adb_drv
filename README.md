@@ -16,6 +16,17 @@ handled by TinyUSB SDK.
   Use a bidirectional level shifter between the Pico GPIO and the ADB data
   line, and supply the device with 5 V on the ADB connector's power pin.
 
+## Flashing a release
+
+1. Grab `adb_drv.uf2` from the
+   [latest release](https://github.com/0xde86/adb_drv/releases/latest).
+2. Hold the **BOOTSEL** button on the Pico while plugging it into your
+   computer via USB. The board will appear as a USB mass-storage drive
+   named `RP2350`.
+3. Drag-and-drop `adb_drv.uf2` onto that drive.
+4. The Pico flashes the firmware and reboots automatically — the drive
+   disappears and the board comes up running `adb_drv`.
+
 ## Protocol
 
 Implementation is based on information from:
