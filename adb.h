@@ -15,7 +15,7 @@
 
 #include "adb_decode.h"
 
-typedef enum {
+typedef enum : uint8_t {
     ADB_OK              =  0,
     ADB_ERR_ADD_TX      = -1,
     ADB_ERR_CLAIM_TX_SM = -2,
@@ -25,7 +25,7 @@ typedef enum {
     ADB_ERR_INIT_RX_SM  = -6,
 } adb_err_t;
 
-typedef enum {
+typedef enum : uint8_t {
     ADB_IDLE    = 0,
     ADB_POLLING = 1,
 } adb_state_t;
