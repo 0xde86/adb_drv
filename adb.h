@@ -71,7 +71,7 @@ void adb_deinit(adb_t *adb) __attribute__((nonnull));
 
 /**
  * Issue a Talk Register 0 to the mouse at address 3 and decode the reply.
- * Can be called in a thight loop. Proper time intervals for polling
+ * Can be called in a tight loop. Proper time intervals for polling
  * ADB hardware are handled automatically via internal state. 
  *
  * @param adb  Initialized driver instance. Must not be NULL.
@@ -79,7 +79,7 @@ void adb_deinit(adb_t *adb) __attribute__((nonnull));
  *             Written only when the function returns true.
  * @return     true if a reply was received and decoded into `*out`;
  *             false on silence (no device responded), timeout, or on
-               waiting for response from device.
+ *             waiting for response from device.
  */
 bool adb_poll(adb_t *adb, mouse_event_t *out) __attribute__((nonnull));
 

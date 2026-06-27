@@ -130,7 +130,6 @@ bool adb_poll(adb_t *adb, mouse_event_t *out) {
         if (!pio_sm_is_rx_fifo_empty(adb->pio, adb->rx_sm)) {
             uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
             pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-            pio_sm_clear_fifos(adb->pio, adb->rx_sm);
             uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK); // drop the start bit
             *out = adb_decode_mouse(res);
             adb->state = ADB_IDLE;
