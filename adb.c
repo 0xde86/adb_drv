@@ -84,7 +84,7 @@ void adb_deinit(adb_t *adb) {
         pio_sm_unclaim(adb->pio, adb->rx_sm);
     }
     if (adb->owned & ADB_OWNS_RX_PROG) {
-        pio_remove_program(adb->pio, &adb_rx_gated_program, adb->rx_off);
+        pio_remove_program(adb->pio, &adb_rx_program, adb->rx_off);
     }
     adb->owned = 0;
 }
@@ -177,7 +177,7 @@ static adb_err_t adb_pio_init_tx(adb_t *adb) {
 }
 
 static adb_err_t adb_pio_init_rx(adb_t *adb) {
-    int off = pio_add_program(adb->pio, &adb_rx_gated_program);
+    int off = pio_add_program(adb->pio, &adb_rx_program);
     if (off < 0) {
         return ADB_ERR_ADD_RX;
     }
@@ -191,7 +191,7 @@ static adb_err_t adb_pio_init_rx(adb_t *adb) {
     adb->rx_sm = (uint8_t)sm;
     adb->owned |= ADB_OWNS_RX_SM;
 
-    pio_sm_config cfg = adb_rx_gated_program_get_default_config(adb->rx_off);
+    pio_sm_config cfg = adb_rx_program_get_default_config(adb->rx_off);
     sm_config_set_in_pins(&cfg, adb->pin);
     sm_config_set_jmp_pin(&cfg, adb->pin);                 // `jmp pin` tests the ADB line
     sm_config_set_in_shift(&cfg, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);

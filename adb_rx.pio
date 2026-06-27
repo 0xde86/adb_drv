@@ -16,7 +16,7 @@
 ; Required config: jmp-pin = ADB pin; ISR shift LEFT; autopush threshold =
 ; ADB_RX_TOTAL_BITS (set in adb.c; one start bit + ADB_RX_DATA_BITS data bits).
 
-.program adb_rx_gated
+.program adb_rx
 .wrap_target
     pull block             ; CPU loads the Timeout window count
     mov  x, osr
