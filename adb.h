@@ -15,11 +15,6 @@
 
 #include "adb_decode.h"
 
-// In the book Guide_to_Macintosh_Family_Hardware there are several mentions
-// that ADB manager polls devices every 11ms. Documentation from tmk_keyboard repo also
-// mentions 11ms as poll interval for active device.
-#define ADB_POLL_INTERVAL_MS 11
-
 typedef enum {
     ADB_OK              =  0,
     ADB_ERR_ADD_TX      = -1,
@@ -30,13 +25,20 @@ typedef enum {
     ADB_ERR_INIT_RX_SM  = -6,
 } adb_err_t;
 
+typedef enum {
+    ADB_IDLE    = 0,
+    ADB_POLLING = 1,
+} adb_state_t;
+
 // Main struct for handling ADB protocol.
 // This includes:
 //  - managing PIO state machines for communicating with ADB device;
 //  - sending commands / receiving reports;
 //  - decoding mouse movement
 typedef struct {
+    absolute_time_t poll_time;
     PIO pio;
+    adb_state_t state;
     uint8_t pin;
     uint8_t tx_sm;
     uint8_t tx_off;
@@ -69,15 +71,17 @@ void adb_deinit(adb_t *adb) __attribute__((nonnull));
 
 /**
  * Issue a Talk Register 0 to the mouse at address 3 and decode the reply.
- * Intended to be called every ::ADB_POLL_INTERVAL_MS.
+ * Can be called in a thight loop. Proper time intervals for polling
+ * ADB hardware are handled automatically via internal state. 
  *
  * @param adb  Initialized driver instance. Must not be NULL.
  * @param out  Destination for the decoded event. Must not be NULL.
  *             Written only when the function returns true.
  * @return     true if a reply was received and decoded into `*out`;
- *             false on silence (no device responded) or timeout.
+ *             false on silence (no device responded), timeout, or on
+               waiting for response from device.
  */
-bool adb_poll(const adb_t *adb, mouse_event_t *out) __attribute__((nonnull));
+bool adb_poll(adb_t *adb, mouse_event_t *out) __attribute__((nonnull));
 
 /**
  * Human-readable description of an ::adb_err_t value.

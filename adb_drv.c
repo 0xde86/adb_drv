@@ -83,23 +83,19 @@ int main(void) {
     uint8_t cur_btn  = 0;
     uint8_t sent_btn = 0;
 
-    absolute_time_t next = make_timeout_time_ms(ADB_POLL_INTERVAL_MS);
     while (true) {
+        watchdog_update();
         tud_task();
         flush_mouse(&pend_dx, &pend_dy, cur_btn, &sent_btn);
 
-        if (time_reached(next)) {
-            next = make_timeout_time_ms(ADB_POLL_INTERVAL_MS);
-            watchdog_update();
-            mouse_event_t e;
-            if (adb_poll(&adb, &e)) {
-                pend_dx = (int16_t)(pend_dx + e.dx);
-                pend_dy = (int16_t)(pend_dy + e.dy);
-                cur_btn = adb_buttons_to_hid(&e);
-                DBG("mouse: dx=%+4d dy=%+4d L=%d R=%d pend=%+d,%+d\n",
-                    e.dx, e.dy, (int)e.left, (int)e.right,
-                    pend_dx, pend_dy);
-            }
+        mouse_event_t e;
+        if (adb_poll(&adb, &e)) {
+            pend_dx = (int16_t)(pend_dx + e.dx);
+            pend_dy = (int16_t)(pend_dy + e.dy);
+            cur_btn = adb_buttons_to_hid(&e);
+            DBG("mouse: dx=%+4d dy=%+4d L=%d R=%d pend=%+d,%+d\n",
+                e.dx, e.dy, (int)e.left, (int)e.right,
+                pend_dx, pend_dy);
         }
     }
 }

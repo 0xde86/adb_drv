@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "adb_decode.h"
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
 #include "pico/time.h"
@@ -12,6 +13,11 @@
 // auto-generated headers from PIO assembly
 #include "adb_rx.pio.h"
 #include "adb_tx.pio.h"
+
+// In the book Guide_to_Macintosh_Family_Hardware there are several mentions
+// that ADB manager polls devices every 11ms. Documentation from tmk_keyboard repo also
+// mentions 11ms as poll interval for active device.
+#define ADB_POLL_INTERVAL_MS 11
 
 // PIO state-machine clock periods
 #define ADB_TX_CYC_US 5U
@@ -93,6 +99,8 @@ adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
     adb->pio   = pio;
     adb->pin   = pin;
     adb->owned = 0;
+    adb->state = ADB_IDLE;
+    adb->poll_time = 0;
 
     adb_err_t err = adb_pio_init_tx(adb);
     if (err != ADB_OK) {
@@ -101,37 +109,41 @@ adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
     return adb_pio_init_rx(adb);
 }
 
-bool adb_poll(const adb_t *adb, mouse_event_t *out) {
-    pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-    pio_sm_clear_fifos(adb->pio, adb->rx_sm);
-    pio_sm_restart(adb->pio, adb->rx_sm);
-    pio_sm_exec(adb->pio, adb->rx_sm, pio_encode_jmp(adb->rx_off)); // PC -> program start
-    pio_interrupt_clear(adb->pio, 0);                       // TX-done flag
-    pio_interrupt_clear(adb->pio, 1);                       // silence flag
-    pio_sm_put(adb->pio, adb->rx_sm, TIMEOUT_CYC_COUNT);                     // preload the Tlt window
-    pio_sm_set_enabled(adb->pio, adb->rx_sm, true);               // pull->mov x->wait irq0->seek
-
-    pio_sm_put_blocking(adb->pio, adb->tx_sm, (uint32_t)CMD_TALK_ADDR3_REG0 << ADB_TX_FIFO_CMD_SHIFT);
-
-    // Safety net only (silence is signalled by IRQ 1 long before this). Sized
-    // to the full transaction: TX ~1.74 ms + Tlt <=0.26 ms + reply sampling
-    // ~1.7 ms => word arrives ~3.7 ms after the command push. 6 ms >> that.
-    absolute_time_t deadline = make_timeout_time_ms(FALLBACK_TIMEOUT_MS);
-    while (pio_sm_is_rx_fifo_empty(adb->pio, adb->rx_sm)) {
-        if (pio_interrupt_get(adb->pio, 1)) { // RX reported SILENCE
+bool adb_poll(adb_t *adb, mouse_event_t *out) {
+    absolute_time_t next_poll = delayed_by_ms(adb->poll_time, ADB_POLL_INTERVAL_MS);
+    absolute_time_t deadline = delayed_by_ms(adb->poll_time, FALLBACK_TIMEOUT_MS);
+    if (adb->state == ADB_IDLE && time_reached(next_poll)) {
+        adb->poll_time = get_absolute_time();
+        pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
+        pio_sm_clear_fifos(adb->pio, adb->rx_sm);
+        pio_sm_restart(adb->pio, adb->rx_sm);
+        pio_sm_exec(adb->pio, adb->rx_sm, pio_encode_jmp(adb->rx_off)); // PC -> program start
+        pio_interrupt_clear(adb->pio, 0);                       // TX-done flag
+        pio_interrupt_clear(adb->pio, 1);                       // silence flag
+        pio_sm_put(adb->pio, adb->rx_sm, TIMEOUT_CYC_COUNT);             // preload the Tlt window
+        pio_sm_set_enabled(adb->pio, adb->rx_sm, true);               // pull->mov x->wait irq0->seek
+        pio_sm_put_blocking(adb->pio, adb->tx_sm, (uint32_t)CMD_TALK_ADDR3_REG0 << ADB_TX_FIFO_CMD_SHIFT);
+        adb->state = ADB_POLLING;
+        return false;
+    }
+    if (adb->state == ADB_POLLING) {
+        if (!pio_sm_is_rx_fifo_empty(adb->pio, adb->rx_sm)) {
+            uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
             pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-            return false;
+            pio_sm_clear_fifos(adb->pio, adb->rx_sm);
+            uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK); // drop the start bit
+            *out = adb_decode_mouse(res);
+            adb->state = ADB_IDLE;
+            return true;
         }
-        if (time_reached(deadline)) {
+        if (pio_interrupt_get(adb->pio, 1) || time_reached(deadline)) {
             pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
+            pio_interrupt_clear(adb->pio, 1);
+            adb->state = ADB_IDLE;
             return false;
         }
     }
-    uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
-    pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-    uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK);        // drop the start bit
-    *out = adb_decode_mouse(res);
-    return true;
+    return false;
 }
 
 const char *adb_error_str(adb_err_t err) {
