@@ -35,8 +35,8 @@ static int8_t clamp_i8(int16_t value) {
 // Does nothing (and does not block) when the endpoint is busy.
 static void flush_mouse(int16_t *pend_dx, int16_t *pend_dy,
                         uint8_t cur_btn, uint8_t *sent_btn) {
-    if (!tud_hid_ready()) { return; }
     if (*pend_dx == 0 && *pend_dy == 0 && cur_btn == *sent_btn) { return; }
+    if (!tud_hid_ready()) { return; }
 
     int8_t delta_x = clamp_i8(*pend_dx);
     int8_t delta_y = clamp_i8(*pend_dy);
