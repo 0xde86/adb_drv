@@ -16,15 +16,19 @@ OPENOCD_DIR     ?= $(HOME)/.pico-sdk/openocd/0.12.0+dev
 OPENOCD         ?= $(OPENOCD_DIR)/openocd
 OPENOCD_SCRIPTS ?= $(OPENOCD_DIR)/scripts
 OPENOCD_TARGET  ?= rp2350
+STRIP           ?= arm-none-eabi-strip
 UF2             := $(BUILD_DIR)/adb_drv.uf2
 ELF             := $(BUILD_DIR)/adb_drv.elf
 
-.PHONY: all build test fuzz tidy flash flash-swd clean help
+.PHONY: all build strip test fuzz tidy flash flash-swd clean help
 
 all: help
 
 build: $(BUILD_DIR)/CMakeCache.txt
 	cmake --build $(BUILD_DIR) --target adb_drv
+
+strip: build
+	$(STRIP) --strip-debug $(ELF)
 
 $(BUILD_DIR)/CMakeCache.txt:
 	cmake -G Ninja -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
@@ -61,6 +65,7 @@ clean:
 help:
 	@echo "Targets:"
 	@echo "  build         build firmware ($(UF2))"
+	@echo "  strip         build firmware, then strip debug info from $(ELF)"
 	@echo "  test          build & run host unit tests via CTest"
 	@echo "  tidy          run clang-tidy"
 	@echo "  fuzz          run libFuzzer harness for $(FUZZ_TIME)s (for fun only)"

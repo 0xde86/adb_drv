@@ -57,7 +57,7 @@ jobs:
         run: echo "PICO_SDK_PATH=$HOME/pico-sdk" >> "$GITHUB_ENV"
 
       - name: Build firmware
-        run: make build
+        run: make strip
 
       - name: Run clang-tidy
         run: make tidy
