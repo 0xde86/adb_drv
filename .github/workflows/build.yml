@@ -35,7 +35,7 @@ jobs:
           sudo apt-get install -y cmake ninja-build clang-tidy python3
 
       - name: Install arm-none-eabi-gcc ${{ env.ARM_TOOLCHAIN_VERSION }}
-        uses: carlosperate/arm-none-eabi-gcc-action@0725d97b026acf7fc8e22dfd5bee912998879ba8  # v1
+        uses: carlosperate/arm-none-eabi-gcc-action@98c40e51546516419841748d3210c290df0d2c6c  # v1
         with:
           release: ${{ env.ARM_TOOLCHAIN_VERSION }}
 
@@ -86,7 +86,7 @@ jobs:
           path: firmware
 
       - name: Create release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3
         with:
           files: |
             firmware/adb_drv.uf2
