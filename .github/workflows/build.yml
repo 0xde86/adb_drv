@@ -18,7 +18,7 @@ on:
 
 env:
   # Must match the version pinned in CMakeLists.txt
-  PICO_SDK_VERSION: "2.2.0"
+  PICO_SDK_VERSION: "2.3.0"
   # Must match the toolchain pinned in CMakeLists.txt
   ARM_TOOLCHAIN_VERSION: "15.2.Rel1"
 
