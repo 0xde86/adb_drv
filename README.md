@@ -39,8 +39,13 @@ Implementation is based on information from:
 - [adb_tx.pio](adb_tx.pio) - drives the command byte with open-drain via
   side-set on `PINDIRS` (5 µs/cycle). Raises IRQ 0 when the stop bit is done.
 - [adb_rx.pio](adb_rx.pio) - gates on IRQ 0, hunts for the device's start bit
-  within the Tlt window, then samples the start bit + 16 data bits at
-  2 µs/cycle. Raises IRQ 1 if the window expires (no response from device).
+  within the Tlt window, then samples and validates the start bit + 16 data
+  bits + stop bit at 2 µs/cycle. Raises IRQ 1 if the window expires (no
+  response from device).
+
+This is intentionally a single-device subset of ADB: it polls a two-byte mouse
+at the default relative-device address (`$03`). It does not perform general
+device discovery, address-conflict resolution, or multi-device SRQ traversal.
 
 ## Make targets
 
@@ -61,7 +66,8 @@ SDK's bundled OpenOCD and a CMSIS-DAP probe (Raspberry Pi Debug Probe or a
 second Pico running picoprobe firmware).
 
 Override the SDK paths via env if your install lives elsewhere:
-`PICOTOOL_DIR=`, `OPENOCD_DIR=`, `OPENOCD_TARGET=` (defaults to `rp2350`).
+`PICOTOOL_VERSION=`, `PICOTOOL_DIR=`, `OPENOCD_VERSION=`, `OPENOCD_DIR=`,
+or `OPENOCD_TARGET=` (defaults to `rp2350`).
 
 ## Debug vs release builds
 

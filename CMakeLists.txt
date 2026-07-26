@@ -50,7 +50,7 @@ pico_enable_stdio_uart(adb_drv 1)
 pico_enable_stdio_usb(adb_drv 0)
 
 # Strict warnings on our sources only; SDK headers stay quiet.
-set_source_files_properties(adb_drv.c adb.c
+set_source_files_properties(adb_drv.c adb.c usb_descriptors.c
     PROPERTIES COMPILE_OPTIONS
     "-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wformat=2;-Wundef;-Wnull-dereference;-Wstrict-prototypes")
 
@@ -86,6 +86,7 @@ add_custom_target(clang-tidy
         -p ${CMAKE_BINARY_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/adb_drv.c
         ${CMAKE_CURRENT_LIST_DIR}/adb.c
+        ${CMAKE_CURRENT_LIST_DIR}/usb_descriptors.c
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     COMMENT "Running clang-tidy on first-party sources")
 
@@ -108,4 +109,3 @@ target_link_libraries(adb_drv
 )
 
 pico_add_extra_outputs(adb_drv)
-

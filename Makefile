@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Denis Rodin
-#
-# Thin wrapper around CMake. Each target reconfigures its build directory
-# only if no CMakeCache.txt exists yet.
 
 BUILD_DIR       ?= build
 TEST_BUILD_DIR  ?= test/build
@@ -10,9 +7,11 @@ FUZZ_BUILD_DIR  ?= test/build-fuzz
 FUZZ_TIME       ?= 10
 # Release strips hot-path DBG() prints; Debug keeps them.
 BUILD_TYPE      ?= Release
-PICOTOOL_DIR    ?= $(HOME)/.pico-sdk/picotool/2.2.0-a4
+PICOTOOL_VERSION ?= 2.3.0
+PICOTOOL_DIR    ?= $(HOME)/.pico-sdk/picotool/$(PICOTOOL_VERSION)
 PICOTOOL        ?= $(PICOTOOL_DIR)/picotool/picotool
-OPENOCD_DIR     ?= $(HOME)/.pico-sdk/openocd/0.12.0+dev
+OPENOCD_VERSION ?= 0.12.0+dev
+OPENOCD_DIR     ?= $(HOME)/.pico-sdk/openocd/$(OPENOCD_VERSION)
 OPENOCD         ?= $(OPENOCD_DIR)/openocd
 OPENOCD_SCRIPTS ?= $(OPENOCD_DIR)/scripts
 OPENOCD_TARGET  ?= rp2350
@@ -20,18 +19,20 @@ STRIP           ?= arm-none-eabi-strip
 UF2             := $(BUILD_DIR)/adb_drv.uf2
 ELF             := $(BUILD_DIR)/adb_drv.elf
 
-.PHONY: all build strip test fuzz tidy flash flash-swd clean help
+.PHONY: all configure build strip test fuzz tidy flash flash-swd clean help
 
 all: help
 
-build: $(BUILD_DIR)/CMakeCache.txt
+configure:
+	cmake -G Ninja -S . -B $(BUILD_DIR) \
+		-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
+		-Dpicotool_DIR=$(PICOTOOL_DIR)/picotool
+
+build: configure
 	cmake --build $(BUILD_DIR) --target adb_drv
 
 strip: build
 	$(STRIP) --strip-debug $(ELF)
-
-$(BUILD_DIR)/CMakeCache.txt:
-	cmake -G Ninja -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 
 test: $(TEST_BUILD_DIR)/CMakeCache.txt
 	cmake --build $(TEST_BUILD_DIR)
@@ -40,7 +41,7 @@ test: $(TEST_BUILD_DIR)/CMakeCache.txt
 $(TEST_BUILD_DIR)/CMakeCache.txt:
 	cmake -S test -B $(TEST_BUILD_DIR)
 
-tidy: $(BUILD_DIR)/CMakeCache.txt
+tidy: configure
 	cmake --build $(BUILD_DIR) --target clang-tidy
 
 fuzz: $(FUZZ_BUILD_DIR)/CMakeCache.txt
@@ -76,3 +77,5 @@ help:
 	@echo "Variables: BUILD_TYPE=Release|Debug (default Release). Debug keeps"
 	@echo "hot-path DBG() prints; Release compiles them out. Run 'make clean'"
 	@echo "before switching BUILD_TYPE"
+	@echo "PICOTOOL_VERSION=2.3.0 or PICOTOOL_DIR=/path/to/matching/version"
+	@echo "OPENOCD_VERSION=0.12.0+dev or OPENOCD_DIR=/path/to/version"
