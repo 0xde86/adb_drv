@@ -28,6 +28,17 @@ typedef struct {
 #define ADB_BTN1_MASK       0x8000U
 #define ADB_BTN2_MASK       0x0080U
 
+// PIO RX-FIFO layout for a complete two-byte mouse data packet:
+//
+//   bit 17       : start bit (must be 1)
+//   bits 16..1   : mouse Register 0
+//   bit 0        : stop bit (must be 0)
+#define ADB_MOUSE_FRAME_BITS       18U
+#define ADB_MOUSE_FRAME_START_MASK (UINT32_C(1) << 17U)
+#define ADB_MOUSE_FRAME_STOP_MASK  UINT32_C(1)
+#define ADB_MOUSE_FRAME_DATA_MASK  UINT32_C(0xFFFF)
+#define ADB_MOUSE_FRAME_DATA_SHIFT 1U
+
 static inline int adb_seven_bit_signed(uint16_t val) {
     val &= ADB_MOUSE_AXIS_MASK;
     return (val & ADB_MOUSE_AXIS_SIGN) ? (int)val - (int)ADB_MOUSE_AXIS_BIAS : (int)val;
@@ -40,6 +51,18 @@ static inline mouse_event_t adb_decode_mouse(uint16_t data) {
     e.left  = (bool)((data & ADB_BTN1_MASK) == 0);
     e.right = (bool)((data & ADB_BTN2_MASK) == 0);
     return e;
+}
+
+static inline bool adb_decode_mouse_frame(uint32_t frame, mouse_event_t *out) {
+    if ((frame & ADB_MOUSE_FRAME_START_MASK) == 0U ||
+        (frame & ADB_MOUSE_FRAME_STOP_MASK) != 0U) {
+        return false;
+    }
+
+    uint16_t data = (uint16_t)(
+        (frame >> ADB_MOUSE_FRAME_DATA_SHIFT) & ADB_MOUSE_FRAME_DATA_MASK);
+    *out = adb_decode_mouse(data);
+    return true;
 }
 
 #endif

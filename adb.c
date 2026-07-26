@@ -29,6 +29,7 @@
 // TX FIFO is 32-bit, command byte is loaded into the top 8 bits so the
 // PIO program reads them out first via OUT shifting left.
 #define ADB_TX_FIFO_CMD_SHIFT 24U
+#define ADB_PIN_MASK_BITS      32U
 
 // Number of Tlt-window iterations the RX state machine waits for the device
 // to assert the start bit. Each iteration is 2 PIO instructions.
@@ -50,20 +51,15 @@
 #define ADB_OWNS_RX_PROG (1U << 2)
 #define ADB_OWNS_RX_SM   (1U << 3)
 
-// Mouse Register 0 wire width
-#define ADB_RX_DATA_BITS  16
-#define ADB_RX_TOTAL_BITS (ADB_RX_DATA_BITS + 1) // +1 start bit
-#define ADB_RX_DATA_MASK  ((1U << ADB_RX_DATA_BITS) - 1U)
-
 // Worst-case wire time for one poll. Polls must not overlap.
-//   TX command   349 cyc * ADB_TX_CYC_US (see adb_tx.pio: attn 161 + sync 14
-//                + 8*20 bits + stop 14 = 349 cyc -> ~1.74 ms)
+//   TX command   349 cyc * ADB_TX_CYC_US (see adb_tx.pio: attn 161 + sync 13
+//                + 8*20 bits + stop 14 + IRQ 1 = 349 cyc -> ~1.74 ms)
 //   Tlt window   TIMEOUT_CYC_COUNT * 2 PIO instr/iter * ADB_RX_CYC_US
-//   RX reply     ADB_RX_TOTAL_BITS * 100 us  (100 us per bit on the wire)
+//   RX reply     ADB_MOUSE_FRAME_BITS * 100 us (start + 16 data + stop)
 #define ADB_TX_CYCLES        349u
 #define ADB_TX_TIME_US       (ADB_TX_CYCLES * ADB_TX_CYC_US)
 #define ADB_TLT_MAX_US       (TIMEOUT_CYC_COUNT * 2U * ADB_RX_CYC_US)
-#define ADB_RX_REPLY_TIME_US (ADB_RX_TOTAL_BITS * 100u)
+#define ADB_RX_REPLY_TIME_US (ADB_MOUSE_FRAME_BITS * 100u)
 #define FALLBACK_TIMEOUT_MS  6u
 _Static_assert(ADB_POLL_INTERVAL_MS * 1000U >
                    ADB_TX_TIME_US + ADB_TLT_MAX_US + ADB_RX_REPLY_TIME_US,
@@ -80,6 +76,8 @@ static adb_err_t adb_pio_init_rx(adb_t *adb);
 void adb_deinit(adb_t *adb) {
     if (adb->owned & ADB_OWNS_TX_SM) {
         pio_sm_set_enabled(adb->pio, adb->tx_sm, false);
+        uint32_t pin_mask = UINT32_C(1) << adb->pin;
+        pio_sm_set_pindirs_with_mask(adb->pio, adb->tx_sm, 0, pin_mask);
         pio_sm_unclaim(adb->pio, adb->tx_sm);
     }
     if (adb->owned & ADB_OWNS_TX_PROG) {
@@ -101,6 +99,11 @@ adb_err_t adb_init(adb_t *adb, PIO pio, uint8_t pin) {
     adb->owned = 0;
     adb->state = ADB_IDLE;
     adb->poll_time = 0;
+
+    if ((uint32_t)pin >= (uint32_t)NUM_BANK0_GPIOS ||
+        pin >= ADB_PIN_MASK_BITS) {
+        return ADB_ERR_INVALID_PIN;
+    }
 
     adb_err_t err = adb_pio_init_tx(adb);
     if (err != ADB_OK) {
@@ -130,9 +133,12 @@ bool adb_poll(adb_t *adb, mouse_event_t *out) {
         if (!pio_sm_is_rx_fifo_empty(adb->pio, adb->rx_sm)) {
             uint32_t word = pio_sm_get(adb->pio, adb->rx_sm);
             pio_sm_set_enabled(adb->pio, adb->rx_sm, false);
-            uint16_t res = (uint16_t)(word & ADB_RX_DATA_MASK); // drop the start bit
-            *out = adb_decode_mouse(res);
             adb->state = ADB_IDLE;
+            mouse_event_t event;
+            if (!adb_decode_mouse_frame(word, &event)) {
+                return false;
+            }
+            *out = event;
             return true;
         }
         if (pio_interrupt_get(adb->pio, 1) || time_reached(deadline)) {
@@ -154,6 +160,7 @@ const char *adb_error_str(adb_err_t err) {
     case ADB_ERR_ADD_RX:      return "PIO: failed to add RX program";
     case ADB_ERR_CLAIM_RX_SM: return "PIO: failed to claim RX state machine";
     case ADB_ERR_INIT_RX_SM:  return "PIO: failed to init RX state machine";
+    case ADB_ERR_INVALID_PIN: return "PIO: invalid or unsupported GPIO pin";
     }
     return "Unknown ADB error";
 }
@@ -205,7 +212,7 @@ static adb_err_t adb_pio_init_rx(adb_t *adb) {
     pio_sm_config cfg = adb_rx_program_get_default_config(adb->rx_off);
     sm_config_set_in_pins(&cfg, adb->pin);
     sm_config_set_jmp_pin(&cfg, adb->pin);                 // `jmp pin` tests the ADB line
-    sm_config_set_in_shift(&cfg, false /*left*/, true /*autopush*/, ADB_RX_TOTAL_BITS);
+    sm_config_set_in_shift(&cfg, false /*left*/, true /*autopush*/, ADB_MOUSE_FRAME_BITS);
     sm_config_set_clkdiv(&cfg, (float)clock_get_hz(clk_sys) * (float)ADB_RX_CYC_US * ADB_US_TO_S);
     if (pio_sm_init(adb->pio, adb->rx_sm, adb->rx_off, &cfg) < 0) {
         return ADB_ERR_INIT_RX_SM;

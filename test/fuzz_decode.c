@@ -19,17 +19,44 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     mouse_event_t e = adb_decode_mouse(word);
 
-    // Wire-format invariants. If the decoder ever lets a value outside
-    // [-64, 63] through, libFuzzer reports the crash with a reproducer
-    // input it minimises automatically.
-    if (e.dx < -64 || e.dx > 63) __builtin_trap();
-    if (e.dy < -64 || e.dy > 63) __builtin_trap();
+    // Compare both axes with an independent two's-complement oracle.
+    int expected_x = word & 0x7F;
+    int expected_y = (word >> 8) & 0x7F;
+    if (expected_x >= 64) expected_x -= 128;
+    if (expected_y >= 64) expected_y -= 128;
+    if (e.dx != expected_x) __builtin_trap();
+    if (e.dy != expected_y) __builtin_trap();
 
     // The button bits must mirror the wire bits exactly (active LOW).
     bool expected_left  = (word & 0x8000u) == 0;
     bool expected_right = (word & 0x0080u) == 0;
     if (e.left  != expected_left)  __builtin_trap();
     if (e.right != expected_right) __builtin_trap();
+
+    // Every data word must round-trip through a correctly framed packet.
+    uint32_t valid_frame = ADB_MOUSE_FRAME_START_MASK |
+                           ((uint32_t)word << ADB_MOUSE_FRAME_DATA_SHIFT);
+    mouse_event_t framed;
+    if (!adb_decode_mouse_frame(valid_frame, &framed)) __builtin_trap();
+    if (framed.dx != e.dx || framed.dy != e.dy ||
+        framed.left != e.left || framed.right != e.right) {
+        __builtin_trap();
+    }
+
+    // Invalid framing must be rejected without touching the destination.
+    mouse_event_t sentinel = {.dx = 12, .dy = -13, .left = true, .right = false};
+    if (adb_decode_mouse_frame(valid_frame & ~ADB_MOUSE_FRAME_START_MASK,
+                               &sentinel)) {
+        __builtin_trap();
+    }
+    if (sentinel.dx != 12 || sentinel.dy != -13 ||
+        !sentinel.left || sentinel.right) {
+        __builtin_trap();
+    }
+    if (adb_decode_mouse_frame(valid_frame | ADB_MOUSE_FRAME_STOP_MASK,
+                               &sentinel)) {
+        __builtin_trap();
+    }
 
     return 0;
 }

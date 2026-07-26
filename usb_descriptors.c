@@ -32,6 +32,12 @@
 #define USB_PID    0x1337
 #define USB_BCD    0x0200
 
+enum {
+    USB_STRING_MAX_CHARS = 32,
+    HEX_NIBBLE_SHIFT = 4,
+    HEX_NIBBLE_MASK = 0x0F,
+};
+
 static const tusb_desc_device_t desc_device = {
     .bLength            = sizeof(tusb_desc_device_t),
     .bDescriptorType    = TUSB_DESC_DEVICE,
@@ -96,8 +102,10 @@ static const char *const string_desc_arr[] = {
     NULL,                        // 3: Serial — filled from pico_unique_id
 };
 
-static uint16_t desc_str_buf[32 + 1];
+static uint16_t desc_str_buf[USB_STRING_MAX_CHARS + 1];
 
+// TinyUSB fixes this callback signature.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
     (void)langid;
     size_t chr_count = 0;
@@ -112,8 +120,11 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
         pico_get_unique_board_id(&uid);
         for (size_t i = 0; i < sizeof(uid.id); i++) {
             static const char hex[] = "0123456789ABCDEF";
-            desc_str_buf[1 + 2 * i]     = (uint16_t)hex[uid.id[i] >> 4];
-            desc_str_buf[1 + 2 * i + 1] = (uint16_t)hex[uid.id[i] & 0xF];
+            size_t buffer_index = 1U + (2U * i);
+            desc_str_buf[buffer_index] =
+                (uint16_t)hex[uid.id[i] >> HEX_NIBBLE_SHIFT];
+            desc_str_buf[buffer_index + 1U] =
+                (uint16_t)hex[uid.id[i] & HEX_NIBBLE_MASK];
         }
         chr_count = 2 * sizeof(uid.id);
         break;
@@ -124,20 +135,27 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
         }
         const char *str = string_desc_arr[index];
         chr_count = strlen(str);
-        const size_t max_count = sizeof(desc_str_buf) / sizeof(desc_str_buf[0]) - 1;
-        if (chr_count > max_count) chr_count = max_count;
+        const size_t max_count =
+            (sizeof(desc_str_buf) / sizeof(desc_str_buf[0])) - 1U;
+        if (chr_count > max_count) {
+            chr_count = max_count;
+        }
         for (size_t i = 0; i < chr_count; i++) {
             desc_str_buf[1 + i] = (uint16_t)str[i];
         }
         break;
     }
 
-    desc_str_buf[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
+    desc_str_buf[0] =
+        (uint16_t)((TUSB_DESC_STRING << 8) | ((2U * chr_count) + 2U));
     return desc_str_buf;
 }
 
+// TinyUSB fixes this callback signature, including its writable buffer.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters,readability-non-const-parameter)
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
-                               hid_report_type_t report_type, uint8_t *buffer,
+                               hid_report_type_t report_type,
+                               uint8_t *buffer, // NOLINT(readability-non-const-parameter)
                                uint16_t reqlen) {
     (void)instance;
     (void)report_id;
@@ -147,6 +165,8 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
     return 0;
 }
 
+// TinyUSB fixes this callback signature.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
                            hid_report_type_t report_type, uint8_t const *buffer,
                            uint16_t bufsize) {

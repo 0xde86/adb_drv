@@ -27,9 +27,9 @@
     set  x, 31        side 1        ;  1 cyc LOW
 attn:
     jmp  x--, attn    side 1 [4]    ; 32 x 5 = 160 cyc ; +set = 161 cyc ~= 805 us
-    ; --- sync: 70 us HIGH (and load the 8-bit counter) ---
+    ; --- sync: 65 us HIGH (and load the 8-bit counter) ---
     set  y, 7         side 0        ;  1 cyc HIGH
-    nop               side 0 [12]   ; 13 cyc HIGH ; sync = 14 cyc = 70 us
+    nop               side 0 [11]   ; 12 cyc HIGH ; sync = 13 cyc = 65 us
     ; --- 8 command bits, MSB first ---
 bitloop:
     out  x, 1         side 1        ;  1 cyc LOW  (pull next bit into X)
@@ -43,6 +43,6 @@ bitend:
     jmp  y--, bitloop side 0        ;  1 cyc HIGH -> "1" high = 12+1 = 13cyc = 65us
                                     ;             -> "0" high =  6+1 =  7cyc = 35us
     ; --- stop bit (a 0-low), then signal + release ---
-    nop               side 1 [12]   ; 13 cyc LOW = 65 us
+    nop               side 1 [13]   ; 14 cyc LOW = 70 us
     irq  0            side 0        ; release bus (HIGH); flag RX to begin
 .wrap                               ; back to `pull` (stays released)
