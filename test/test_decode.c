@@ -15,6 +15,7 @@
 #include "unity.h"
 
 #include "adb_decode.h"
+#include "mouse_math.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -97,6 +98,61 @@ static void test_both_buttons_and_diagonal(void) {
     TEST_ASSERT_EQUAL_INT8(-5, e.dy);
 }
 
+static uint32_t frame_from_data(uint16_t data) {
+    return ADB_MOUSE_FRAME_START_MASK |
+           ((uint32_t)data << ADB_MOUSE_FRAME_DATA_SHIFT);
+}
+
+static void test_valid_frame(void) {
+    mouse_event_t e;
+    TEST_ASSERT_TRUE(adb_decode_mouse_frame(frame_from_data(0x7B0A), &e));
+    TEST_ASSERT_TRUE(e.left);
+    TEST_ASSERT_TRUE(e.right);
+    TEST_ASSERT_EQUAL_INT8(10, e.dx);
+    TEST_ASSERT_EQUAL_INT8(-5, e.dy);
+}
+
+static void test_frame_rejects_invalid_start(void) {
+    mouse_event_t e = {.dx = 12, .dy = -13, .left = true, .right = false};
+    uint32_t frame = (uint32_t)0x8080U << ADB_MOUSE_FRAME_DATA_SHIFT;
+
+    TEST_ASSERT_FALSE(adb_decode_mouse_frame(frame, &e));
+    TEST_ASSERT_EQUAL_INT8(12, e.dx);
+    TEST_ASSERT_EQUAL_INT8(-13, e.dy);
+    TEST_ASSERT_TRUE(e.left);
+    TEST_ASSERT_FALSE(e.right);
+}
+
+static void test_frame_rejects_invalid_stop(void) {
+    mouse_event_t e = {.dx = 12, .dy = -13, .left = true, .right = false};
+    uint32_t frame = frame_from_data(0x8080) | ADB_MOUSE_FRAME_STOP_MASK;
+
+    TEST_ASSERT_FALSE(adb_decode_mouse_frame(frame, &e));
+    TEST_ASSERT_EQUAL_INT8(12, e.dx);
+    TEST_ASSERT_EQUAL_INT8(-13, e.dy);
+    TEST_ASSERT_TRUE(e.left);
+    TEST_ASSERT_FALSE(e.right);
+}
+
+static void test_mouse_clamp_i8(void) {
+    TEST_ASSERT_EQUAL_INT8(INT8_MIN, mouse_clamp_i8(INT32_MIN));
+    TEST_ASSERT_EQUAL_INT8(INT8_MIN, mouse_clamp_i8(INT8_MIN));
+    TEST_ASSERT_EQUAL_INT8(-1, mouse_clamp_i8(-1));
+    TEST_ASSERT_EQUAL_INT8(0, mouse_clamp_i8(0));
+    TEST_ASSERT_EQUAL_INT8(1, mouse_clamp_i8(1));
+    TEST_ASSERT_EQUAL_INT8(INT8_MAX, mouse_clamp_i8(INT8_MAX));
+    TEST_ASSERT_EQUAL_INT8(INT8_MAX, mouse_clamp_i8(INT32_MAX));
+}
+
+static void test_mouse_accumulator_saturates(void) {
+    TEST_ASSERT_EQUAL_INT32(63, mouse_accumulate_i8(0, 63));
+    TEST_ASSERT_EQUAL_INT32(-64, mouse_accumulate_i8(0, -64));
+    TEST_ASSERT_EQUAL_INT32(INT32_MAX, mouse_accumulate_i8(INT32_MAX - 1, 63));
+    TEST_ASSERT_EQUAL_INT32(INT32_MIN, mouse_accumulate_i8(INT32_MIN + 1, -64));
+    TEST_ASSERT_EQUAL_INT32(INT32_MAX - 1, mouse_accumulate_i8(INT32_MAX, -1));
+    TEST_ASSERT_EQUAL_INT32(INT32_MIN + 1, mouse_accumulate_i8(INT32_MIN, 1));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_idle);
@@ -108,5 +164,10 @@ int main(void) {
     RUN_TEST(test_left_button_pressed);
     RUN_TEST(test_right_button_pressed);
     RUN_TEST(test_both_buttons_and_diagonal);
+    RUN_TEST(test_valid_frame);
+    RUN_TEST(test_frame_rejects_invalid_start);
+    RUN_TEST(test_frame_rejects_invalid_stop);
+    RUN_TEST(test_mouse_clamp_i8);
+    RUN_TEST(test_mouse_accumulator_saturates);
     return UNITY_END();
 }

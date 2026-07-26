@@ -23,6 +23,7 @@ typedef enum : int8_t {
     ADB_ERR_ADD_RX      = -4,
     ADB_ERR_CLAIM_RX_SM = -5,
     ADB_ERR_INIT_RX_SM  = -6,
+    ADB_ERR_INVALID_PIN = -7,
 } adb_err_t;
 
 typedef enum : uint8_t {
@@ -53,7 +54,8 @@ typedef struct {
  *
  * @param adb  Driver instance to initialize. Must not be NULL.
  * @param pio  PIO instance to use (e.g. pio0).
- * @param pin  GPIO pin connected to the ADB data line.
+ * @param pin  GPIO pin connected to the ADB data line. Must name a valid
+ *             bank-0 GPIO below 32.
  * @return     ADB_OK on success, or a negative ::adb_err_t on failure.
  *             On failure, partially-claimed resources are recorded in `adb`;
  *             the caller must call adb_deinit() to release them.
@@ -78,8 +80,8 @@ void adb_deinit(adb_t *adb) __attribute__((nonnull));
  * @param out  Destination for the decoded event. Must not be NULL.
  *             Written only when the function returns true.
  * @return     true if a reply was received and decoded into `*out`;
- *             false on silence (no device responded), timeout, or on
- *             waiting for response from device.
+ *             false on silence (no device responded), timeout, invalid
+ *             packet framing, or while waiting for a response.
  */
 bool adb_poll(adb_t *adb, mouse_event_t *out) __attribute__((nonnull));
 
